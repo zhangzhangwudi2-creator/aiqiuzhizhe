@@ -1,4 +1,4 @@
-﻿"""FastAPI backend for AI Resume Assistant"""
+"""FastAPI backend for AI Resume Assistant"""
 import os
 import json
 import io
@@ -12,7 +12,7 @@ from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from backend.prompts import SYSTEM_PROMPT, REWRITE_PROMPT, build_prompt, build_rewrite_prompt
+from prompts import SYSTEM_PROMPT, REWRITE_PROMPT, build_prompt, build_rewrite_prompt
 
 load_dotenv()
 
