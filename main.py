@@ -89,7 +89,7 @@ async def rewrite_resume(resume: UploadFile = File(...), jd_text: str = Form(...
         raise HTTPException(status_code=500, detail=f"优化失败: {e}")
 
 
-@app.post("/download-rew@app.get("/health")
+@app.get("/health")
 async def health():
     return {"status": "ok"}
 

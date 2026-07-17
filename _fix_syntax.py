@@ -1,0 +1,11 @@
+﻿f = open("C:/Users/张凡/Documents/ai求职助手 2/main.py", "r", encoding="utf-8")
+c = f.read()
+f.close()
+c = c.replace('@app.post("/download-rew@app.get("/health")', '@app.get("/health")')
+f = open("C:/Users/张凡/Documents/ai求职助手 2/main.py", "w", encoding="utf-8")
+f.write(c)
+f.close()
+# Verify line 92
+lines = open("C:/Users/张凡/Documents/ai求职助手 2/main.py", "r", encoding="utf-8").readlines()
+print(f"Line 92: {repr(lines[91])}")
+print("Fixed")
