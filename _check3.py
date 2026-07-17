@@ -1,0 +1,8 @@
+﻿f = open("C:/Users/张凡/Documents/ai求职助手 2/static/index.html", "r", encoding="utf-8")
+c = f.read()
+f.close()
+print("jdImageZone HTML:", c.find('id="jdImageZone"'))
+print("ocrProgress HTML:", c.find('id="ocrProgress"'))
+print("jdImageInput HTML:", c.find('id="jdImageInput"'))
+print("Tesseract.js CDN:", c.find("tesseract.js"))
+print("Last 500 chars:", repr(c[-500:]))

@@ -1,0 +1,68 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>职位搜索 - AI求职助手</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="logo">AI求职助手</span>
+        </div>
+        <div class="nav-menu">
+            <a href="/" class="nav-link">首页</a>
+            <a href="/pages/dashboard.html" class="nav-link">工作台</a>
+            <a href="/pages/resume.html" class="nav-link">简历管理</a>
+            <a href="/pages/jobs.html" class="nav-link active">职位搜索</a>
+        </div>
+        <div class="nav-auth" id="navAuth">
+            <span class="user-info" id="userInfo" style="display:none"></span>
+            <button class="btn btn-primary" onclick="showLogin()" id="loginBtn">登录</button>
+            <button class="btn btn-outline" onclick="handleLogout()" id="logoutBtn" style="display:none">退出</button>
+        </div>
+    </nav>
+
+    <main class="jobs-page">
+        <div class="page-header">
+            <h1>职位搜索</h1>
+            <p>AI 智能匹配你的理想职位</p>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" id="searchKeyword" placeholder="搜索职位、公司、关键词..." class="search-input">
+            <input type="text" id="searchLocation" placeholder="工作地点" class="search-input">
+            <select id="searchType" class="search-select">
+                <option value="">全部类型</option>
+                <option value="全职">全职</option>
+                <option value="兼职">兼职</option>
+                <option value="实习">实习</option>
+            </select>
+            <button class="btn btn-primary" onclick="searchJobs()">搜索</button>
+        </div>
+
+        <div class="jobs-grid">
+            <div class="jobs-list" id="jobsList">
+                <div class="empty-state">
+                    <p>搜索或上传简历获取推荐</p>
+                </div>
+            </div>
+            <div class="job-detail-sidebar" id="jobDetail" style="display:none">
+                <h3 id="jobDetailTitle">职位详情</h3>
+                <div id="jobDetailContent"></div>
+                <button class="btn btn-primary btn-block" onclick="matchJob()">AI 匹配评估</button>
+            </div>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </main>
+
+    <footer class="footer">
+        <p>AI求职助手 &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
