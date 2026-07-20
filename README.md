@@ -9,6 +9,8 @@
 
 **[在线体验](https://aiqiuzhizhe-production.up.railway.app/)** · **[查看自动测试](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions)**
 
+学习与迭代安排见 [`docs/30-day-internship-plan.md`](docs/30-day-internship-plan.md)。
+
 ![AI 求职助手首页](docs/demo.png)
 
 ## 项目亮点
