@@ -1,100 +1,216 @@
-"""FastAPI backend for AI Resume Assistant"""
-import os
-import json
+"""FastAPI backend for the AI resume assistant."""
+
+import asyncio
 import io
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+import json
+import os
+from pathlib import Path
+
 from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from openai import AsyncOpenAI
 from pypdf import PdfReader
-from openai import OpenAI
-from prompts import SYSTEM_PROMPT, REWRITE_PROMPT, build_prompt, build_rewrite_prompt
+
+from prompts import REWRITE_PROMPT, SYSTEM_PROMPT, build_prompt, build_rewrite_prompt
+from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
+from schemas import AnalysisResult
 
 load_dotenv()
 
-app = FastAPI(title="AI 求职助手")
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_RESUME_CHARS = 30_000
+MAX_JD_CHARS = 15_000
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "21600"))
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "5"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        content = f.read()
-    from fastapi.responses import Response
-    return Response(content=content, media_type="text/html", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
+response_cache = TTLCache(max_entries=100, ttl_seconds=CACHE_TTL_SECONDS)
+rate_limiter = SlidingWindowRateLimiter(
+    max_requests=RATE_LIMIT_REQUESTS,
+    window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
-def _parse_resume(resume: UploadFile) -> str:
-    if not resume.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="请上传 PDF 格式的简历")
+def _cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS", "").strip()
+    if not configured:
+        return []
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
+app = FastAPI(title="AI 求职助手", version="1.1.0")
+
+allowed_origins = _cors_origins()
+if allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _get_client() -> AsyncOpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AI 服务尚未配置，请联系管理员")
+    return AsyncOpenAI(
+        api_key=api_key,
+        base_url="https://api.deepseek.com",
+        timeout=60.0,
+        max_retries=1,
+    )
+
+
+@app.get("/", response_class=FileResponse)
+async def index() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "index.html",
+        media_type="text/html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+def _extract_pdf_text(contents: bytes) -> str:
     try:
-        contents = resume.file.read()
         reader = PdfReader(io.BytesIO(contents))
         text = "".join(page.extract_text() or "" for page in reader.pages)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"PDF 解析失败: {e}")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="PDF 解析失败，请确认文件未损坏") from exc
+
     if not text.strip():
-        raise HTTPException(status_code=400, detail="无法从 PDF 中提取文本")
-    return text[:30000]
+        raise HTTPException(status_code=400, detail="无法从 PDF 中提取文字，请使用文字版简历")
+    return text[:MAX_RESUME_CHARS]
+
+
+async def _parse_resume(resume: UploadFile) -> str:
+    filename = resume.filename or ""
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="请上传 PDF 格式的简历")
+    if resume.content_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=400, detail="文件类型不是 PDF")
+
+    contents = await resume.read(MAX_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="PDF 文件不能超过 10MB")
+    return await asyncio.to_thread(_extract_pdf_text, contents)
+
+
+def _validate_jd(jd_text: str) -> str:
+    cleaned = jd_text.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="请输入岗位描述")
+    if len(cleaned) > MAX_JD_CHARS:
+        raise HTTPException(status_code=413, detail="岗位描述不能超过 15000 字")
+    return cleaned
+
+
+def _client_identity(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(request: Request) -> None:
+    allowed, retry_after = rate_limiter.check(_client_identity(request))
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="请求过于频繁，请稍后再试",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+async def _chat_completion(*, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, json_output: bool = False) -> str:
+    client = _get_client()
+    request = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if json_output:
+        request["response_format"] = {"type": "json_object"}
+
+    try:
+        response = await client.chat.completions.create(**request)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请稍后重试") from exc
+
+    content = response.choices[0].message.content
+    if not content:
+        raise HTTPException(status_code=502, detail="AI 服务返回了空内容，请重试")
+    return content
 
 
 @app.post("/analyze")
-async def analyze(resume: UploadFile = File(...), jd_text: str = Form(...)):
-    if not jd_text.strip():
-        raise HTTPException(status_code=400, detail="请输入岗位描述")
-    resume_text = _parse_resume(resume)
-    jd_truncated = jd_text[:15000]
+async def analyze(request: Request, resume: UploadFile = File(...), jd_text: str = Form(...)):
+    resume_text = await _parse_resume(resume)
+    jd = _validate_jd(jd_text)
+    cache_key = build_cache_key("analyze", resume_text, jd)
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    _enforce_rate_limit(request)
+    content = await _chat_completion(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=build_prompt(resume_text, jd),
+        temperature=0.3,
+        max_tokens=4096,
+        json_output=True,
+    )
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_prompt(resume_text, jd_truncated)}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=4096,
-        )
-        return json.loads(response.choices[0].message.content)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="AI 响应格式异常")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 调用失败: {e}")
+        result = AnalysisResult.model_validate_json(content).model_dump()
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="AI 返回格式异常，请重试") from exc
+    response_cache.set(cache_key, result)
+    return result
 
 
 @app.post("/rewrite-resume")
-async def rewrite_resume(resume: UploadFile = File(...), jd_text: str = Form(...)):
-    if not jd_text.strip():
-        raise HTTPException(status_code=400, detail="请输入岗位描述")
-    resume_text = _parse_resume(resume)
-    jd_truncated = jd_text[:15000]
-    try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": REWRITE_PROMPT},
-                {"role": "user", "content": build_rewrite_prompt(resume_text, jd_truncated)}
-            ],
-            temperature=0.5,
-            max_tokens=8192,
-        )
-        return {"rewritten_resume": response.choices[0].message.content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"优化失败: {e}")
+async def rewrite_resume(request: Request, resume: UploadFile = File(...), jd_text: str = Form(...)):
+    resume_text = await _parse_resume(resume)
+    jd = _validate_jd(jd_text)
+    cache_key = build_cache_key("rewrite", resume_text, jd)
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    _enforce_rate_limit(request)
+    content = await _chat_completion(
+        system_prompt=REWRITE_PROMPT,
+        user_prompt=build_rewrite_prompt(resume_text, jd),
+        temperature=0.5,
+        max_tokens=8192,
+    )
+    result = {"rewritten_resume": content}
+    response_cache.set(cache_key, result)
+    return result
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "ai_configured": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
+        "rate_limit": f"{RATE_LIMIT_REQUESTS}/{RATE_LIMIT_WINDOW_SECONDS}s",
+        "cache_ttl_seconds": CACHE_TTL_SECONDS,
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)

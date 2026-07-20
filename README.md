@@ -1,123 +1,117 @@
-﻿# AI 求职助手 🎯
+# AI 求职助手
 
-基于 DeepSeek API 的简历-JD 匹配分析工具。上传 PDF 简历，粘贴或截图岗位描述，
-AI 自动分析匹配度并生成：
-- 优势分析 & 技能缺口
-- 简历修改建议 & 面试问题预测
-- 针对目标岗位优化的简历（可复制或下载 Word）
+面向实习与校招场景的简历–岗位匹配工具。用户上传 PDF 简历并输入岗位描述（JD）后，系统调用 DeepSeek 生成结构化匹配分析，也可以在不改动事实的前提下生成针对岗位的简历改写稿。
 
-## 功能特性
+## 在线功能
 
-| 功能 | 说明 |
-|------|------|
-| PDF 简历上传 | 拖拽或点击上传，支持微信直接拖拽 |
-| JD 文本输入 | 粘贴文字，或截图自动 OCR 识别（支持多张） |
-| 匹配度分析 | 综合评分 + 4 维度结构化报告 |
-| 简历优化 | 基于 JD 重新组织语言，保留真实信息 |
-| 下载 Word | 一键下载优化后的简历 (.doc 格式) |
-| 无需登录 | 直接使用，不保存任何用户文件 |
-| 响应式设计 | 手机 / 平板 / 桌面均可正常使用 |
+- PDF 简历解析与内容长度控制
+- JD 文本输入，或在浏览器端使用 Tesseract.js 识别多张截图
+- 匹配度、优势、技能缺口、简历建议和面试问题的结构化分析
+- 针对目标岗位生成简历改写稿
+- 复制改写结果，或下载 Word 兼容的 `.doc` 文件
+- 无需注册；服务端不持久化简历文件
+- 同一输入结果缓存 6 小时，重复查看不再次消耗模型额度
+- 默认每个 IP 每小时最多 5 次未命中缓存的 AI 调用
+
+## 数据与隐私
+
+- JD 截图的 OCR 在浏览器内执行，截图不会上传到服务端。
+- PDF 会上传到本服务以提取文字，但不会被持久化保存。
+- 提取出的简历文字和 JD 会发送给 DeepSeek API 完成分析或改写。
+- 请勿上传身份证号、家庭住址等完成岗位分析不需要的敏感信息。
 
 ## 技术栈
 
-- **后端**: Python FastAPI
-- **AI**: DeepSeek API (deepseek-chat)
-- **PDF 解析**: PyPDF
-- **OCR**: Tesseract.js (浏览器端，不上传图片)
-- **Word 生成**: 浏览器前端生成 .doc 文件
-- **部署**: 单服务，适合 Railway / Hugging Face Spaces / 云服务器
+- 后端：Python、FastAPI、AsyncOpenAI
+- 模型：DeepSeek `deepseek-chat`
+- PDF：PyPDF
+- OCR：Tesseract.js（浏览器端）
+- 前端：原生 HTML、CSS、JavaScript
+- 部署：Railway / Nixpacks
+- 测试：Pytest
 
-## 快速开始
+## 当前架构
 
-### 1. 安装依赖
-```bash
-pip install -r requirements.txt
-```
-
-### 2. 配置环境变量
-```bash
-# 方式一：创建 .env 文件
-echo DEEPSEEK_API_KEY=your_key_here > .env
-
-# 方式二：直接设置环境变量
-export DEEPSEEK_API_KEY=your_key_here
-```
-
-### 3. 启动服务
-```bash
-python main.py
-# 或
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-访问 http://localhost:8000
-
-## 部署指南
-
-### 所需环境变量
-```
-DEEPSEEK_API_KEY=sk-xxx  # DeepSeek API 密钥
-```
-
-### Railway 部署
-```
-1. 将代码推送到 GitHub 仓库
-2. 在 Railway 创建新项目，连接 GitHub
-3. 在项目设置中添加环境变量 DEEPSEEK_API_KEY
-4. 启动命令: python main.py
-5. Railway 会自动分配域名
-```
-
-### Hugging Face Spaces 部署
-```
-1. 创建 Space → 选择 Docker / 空白
-2. 上传代码
-3. 在 Settings → Repository Secrets 添加 DEEPSEEK_API_KEY
-4. Space 会自动启动并分配域名
-```
-
-### 云服务器部署 (Ubuntu)
-```bash
-# 安装 Python 和依赖
-sudo apt update && sudo apt install -y python3 python3-pip
-pip install -r requirements.txt
-
-# 设置环境变量
-export DEEPSEEK_API_KEY=sk-xxx
-
-# 使用 nohup 后台运行
-nohup python main.py > app.log 2>&1 &
-
-# 或使用 systemd 管理（推荐）
-```
-
-## 项目结构
-
-```
+```text
 .
-├── main.py           # FastAPI 服务入口
-├── backend/
-│   ├── __init__.py
-│   └── prompts.py    # Prompt 模板
+├── main.py                # 当前部署入口与 API
+├── prompts.py             # 分析、改写 Prompt
 ├── static/
-│   └── index.html    # 前端页面（单页应用）
-├── .env              # 环境变量（不上传 Git）
+│   └── index.html         # 当前线上前端
+├── tests/
+│   └── test_main.py       # 核心输入校验测试
+├── evaluation/            # 不调用 API 的结构评测样例
+├── scripts/
+│   └── evaluate_outputs.py
 ├── requirements.txt
-├── README.md
-└── .gitignore
+├── requirements-dev.txt
+├── .env.example
+└── nixpacks.toml
 ```
 
-## API 接口
+仓库中的 `backend/` 和 `frontend/` 是早期未完成的架构实验，不属于当前部署版本，其中包含模拟存储和模拟响应。为保留演进记录暂未删除，后续会在确认迁移价值后归档或移除。
+
+## 本地运行
+
+需要 Python 3.10 或更高版本。
+
+```bash
+python -m venv .venv
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+在 `.env` 中填写：
+
+```dotenv
+DEEPSEEK_API_KEY=your_deepseek_api_key
+```
+
+启动：
+
+```powershell
+python main.py
+```
+
+访问 `http://localhost:8000`。
+
+## API
 
 | 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/` | 前端页面 |
-| POST | `/analyze` | 简历分析 |
-| POST | `/rewrite-resume` | 简历优化 |
-| GET | `/health` | 健康检查 |
+|---|---|---|
+| `GET` | `/` | 前端页面 |
+| `POST` | `/analyze` | 简历与 JD 匹配分析 |
+| `POST` | `/rewrite-resume` | 针对 JD 改写简历 |
+| `GET` | `/health` | 服务和 AI 配置状态 |
 
-## 隐私说明
+上传限制：PDF 最大 10MB；提取后的简历最多使用 30,000 字符；JD 最多 15,000 字符。
 
-- 不上传简历或图片到任何第三方服务器（AI 分析仅调用 DeepSeek API 发送文本）
-- OCR 识别在浏览器本地完成，图片不会离开你的设备
-- 不保存用户文件，服务重启后数据自动清除
+## 测试
+
+```powershell
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+测试覆盖空 JD、超长 JD、错误文件类型、损坏 PDF 和无文字 PDF 等边界情况。
+
+不消耗模型额度的离线输出结构评测：
+
+```powershell
+python scripts/evaluate_outputs.py
+```
+
+当前离线评测只验证输出契约和字段完整性，不声称能够证明内容质量。后续会增加人工标注的质量评分。
+
+## 后续计划
+
+- 增加 Prompt 版本与人工标注评测集，验证内容质量
+- 将单机内存限流升级为持久化限流（适用于多实例部署）
+- 增加端到端接口测试
+- 归档未使用的旧版目录

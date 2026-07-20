@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Run offline contract evaluation
+        run: python scripts/evaluate_outputs.py
+
+      - name: Compile Python files
+        run: python -m compileall -q main.py prompts.py schemas.py quota.py scripts tests
