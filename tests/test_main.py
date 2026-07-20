@@ -1,0 +1,91 @@
+import io
+
+import pytest
+from fastapi import HTTPException, UploadFile
+from pypdf import PdfWriter
+
+import main
+from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
+from schemas import AnalysisResult
+
+
+def test_validate_jd_rejects_empty_text():
+    with pytest.raises(HTTPException) as exc:
+        main._validate_jd("   ")
+    assert exc.value.status_code == 400
+
+
+def test_validate_jd_rejects_oversized_text():
+    with pytest.raises(HTTPException) as exc:
+        main._validate_jd("a" * (main.MAX_JD_CHARS + 1))
+    assert exc.value.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_parse_resume_rejects_non_pdf():
+    upload = UploadFile(filename="resume.txt", file=io.BytesIO(b"hello"))
+    upload.headers = {"content-type": "text/plain"}
+    with pytest.raises(HTTPException) as exc:
+        await main._parse_resume(upload)
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_parse_resume_rejects_pdf_without_text():
+    buffer = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.write(buffer)
+    buffer.seek(0)
+    upload = UploadFile(filename="resume.pdf", file=buffer, headers={"content-type": "application/pdf"})
+    with pytest.raises(HTTPException) as exc:
+        await main._parse_resume(upload)
+    assert exc.value.status_code == 400
+
+
+def test_extract_pdf_rejects_invalid_file():
+    with pytest.raises(HTTPException) as exc:
+        main._extract_pdf_text(b"not a pdf")
+    assert exc.value.status_code == 400
+
+
+def test_analysis_schema_accepts_valid_output():
+    result = AnalysisResult.model_validate({
+        "overall_score": 80,
+        "strengths": [{"point": "项目", "detail": "有真实部署"}],
+        "skill_gaps": [{"skill": "测试", "importance": "高", "current_status": "较少", "improvement_suggestion": "补充测试"}],
+        "resume_tips": [{"section": "项目", "issue": "缺少数据", "rewrite_suggestion": "补充评测结果"}],
+        "interview_questions": [{"question": "如何评测？", "intent": "评测能力", "difficulty": "中等"}],
+    })
+    assert result.overall_score == 80
+
+
+def test_analysis_schema_rejects_invalid_score():
+    with pytest.raises(ValueError):
+        AnalysisResult.model_validate({
+            "overall_score": 120,
+            "strengths": [],
+            "skill_gaps": [],
+            "resume_tips": [],
+            "interview_questions": [],
+        })
+
+
+def test_cache_key_is_stable_and_operation_specific():
+    assert build_cache_key("analyze", "resume", "jd") == build_cache_key("analyze", "resume", "jd")
+    assert build_cache_key("analyze", "resume", "jd") != build_cache_key("rewrite", "resume", "jd")
+
+
+def test_ttl_cache_returns_saved_value():
+    cache = TTLCache(max_entries=2, ttl_seconds=60)
+    cache.set("key", {"score": 80})
+    assert cache.get("key") == {"score": 80}
+
+
+def test_rate_limiter_blocks_after_limit():
+    limiter = SlidingWindowRateLimiter(max_requests=2, window_seconds=60)
+    assert limiter.check("visitor")[0] is True
+    assert limiter.check("visitor")[0] is True
+    allowed, retry_after = limiter.check("visitor")
+    assert allowed is False
+    assert retry_after > 0

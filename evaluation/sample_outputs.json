@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "ai_operations_intern",
+    "output": {
+      "overall_score": 76,
+      "strengths": [{"point": "AI工具经验", "detail": "有大模型与工作流项目实践"}],
+      "skill_gaps": [{"skill": "数据评测", "importance": "高", "current_status": "缺少真实评测集", "improvement_suggestion": "建立带人工标签的小型测试集"}],
+      "resume_tips": [{"section": "项目经历", "issue": "缺少验证数据", "rewrite_suggestion": "补充样本量和测试方法"}],
+      "interview_questions": [{"question": "如何判断Prompt改进有效？", "intent": "考察评测思维", "difficulty": "中等"}]
+    }
+  },
+  {
+    "case_id": "aigc_content_intern",
+    "output": {
+      "overall_score": 71,
+      "strengths": [{"point": "内容工作流", "detail": "能拆解多平台内容生成流程"}],
+      "skill_gaps": [{"skill": "运营数据", "importance": "中", "current_status": "以演示数据为主", "improvement_suggestion": "补充真实内容反馈记录"}],
+      "resume_tips": [{"section": "项目成果", "issue": "成果描述偏抽象", "rewrite_suggestion": "描述测试数量、耗时和人工评价"}],
+      "interview_questions": [{"question": "不同平台的Prompt有何区别？", "intent": "考察业务理解", "difficulty": "简单"}]
+    }
+  },
+  {
+    "case_id": "ai_product_intern",
+    "output": {
+      "overall_score": 73,
+      "strengths": [{"point": "需求拆解", "detail": "能从求职痛点设计完整功能链路"}],
+      "skill_gaps": [{"skill": "用户验证", "importance": "高", "current_status": "缺少访谈与使用数据", "improvement_suggestion": "邀请真实求职者测试并记录反馈"}],
+      "resume_tips": [{"section": "项目背景", "issue": "用户证据不足", "rewrite_suggestion": "补充测试对象和迭代依据"}],
+      "interview_questions": [{"question": "为什么先做OCR？", "intent": "考察功能优先级", "difficulty": "中等"}]
+    }
+  }
+]
