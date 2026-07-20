@@ -2,6 +2,33 @@
 
 面向实习与校招场景的简历–岗位匹配工具。用户上传 PDF 简历并输入岗位描述（JD）后，系统调用 DeepSeek 生成结构化匹配分析，也可以在不改动事实的前提下生成针对岗位的简历改写稿。
 
+[![Tests](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions/workflows/tests.yml/badge.svg)](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions/workflows/tests.yml)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Railway-7B3FE4)](https://aiqiuzhizhe-production.up.railway.app/)
+
+**[在线体验](https://aiqiuzhizhe-production.up.railway.app/)** · **[查看自动测试](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions)**
+
+![AI 求职助手首页](docs/demo.png)
+
+## 项目亮点
+
+- **真实业务闭环**：PDF简历与JD输入 → DeepSeek结构化分析 → 针对岗位生成改写稿。
+- **成本保护**：按IP限流，并缓存相同输入6小时，减少重复API费用。
+- **可靠输出**：使用Pydantic校验模型返回的分数、字段和枚举值。
+- **隐私边界清楚**：截图OCR留在浏览器端；服务端不持久化PDF，并明确披露文本会发送至DeepSeek。
+- **可重复验证**：10项Pytest测试、3条离线契约评测和GitHub Actions持续集成。
+
+## 处理流程
+
+```text
+PDF简历 ──> PyPDF提取文字 ──┐
+                            ├──> 输入校验 ──> 限流/缓存 ──> DeepSeek
+JD文本/截图 ──> 浏览器OCR ──┘                            │
+                                                         v
+                             Pydantic校验 <── JSON结构化分析
+```
+
 ## 在线功能
 
 - PDF 简历解析与内容长度控制
