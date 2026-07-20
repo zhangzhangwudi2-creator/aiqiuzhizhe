@@ -7,6 +7,7 @@ from pypdf import PdfWriter
 import main
 from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
 from schemas import AnalysisResult
+from evaluation.rubric import evaluate_case
 
 
 def test_validate_jd_rejects_empty_text():
@@ -89,3 +90,41 @@ def test_rate_limiter_blocks_after_limit():
     allowed, retry_after = limiter.check("visitor")
     assert allowed is False
     assert retry_after > 0
+
+
+def test_quality_rubric_accepts_matching_output():
+    case = {
+        "case_id": "demo",
+        "expectations": {
+            "score_range": [70, 80],
+            "required_terms": ["工作流", "评测"],
+            "forbidden_terms": ["百万用户"],
+        },
+        "output": {
+            "overall_score": 75,
+            "strengths": [{"point": "工作流", "detail": "有项目实践"}],
+            "skill_gaps": [{"skill": "评测", "importance": "高", "current_status": "较少", "improvement_suggestion": "建立测试集"}],
+            "resume_tips": [{"section": "项目", "issue": "数据不足", "rewrite_suggestion": "补充验证结果"}],
+            "interview_questions": [{"question": "如何验证？", "intent": "评测思维", "difficulty": "中等"}],
+        },
+    }
+    assert evaluate_case(case).passed is True
+
+
+def test_quality_rubric_rejects_unsupported_claim():
+    case = {
+        "case_id": "hallucination",
+        "expectations": {
+            "score_range": [0, 100],
+            "required_terms": [],
+            "forbidden_terms": ["百万用户"],
+        },
+        "output": {
+            "overall_score": 80,
+            "strengths": [{"point": "用户", "detail": "拥有百万用户"}],
+            "skill_gaps": [{"skill": "测试", "importance": "中", "current_status": "较少", "improvement_suggestion": "补充"}],
+            "resume_tips": [{"section": "项目", "issue": "数据不足", "rewrite_suggestion": "补充"}],
+            "interview_questions": [{"question": "为什么？", "intent": "判断", "difficulty": "简单"}],
+        },
+    }
+    assert evaluate_case(case).passed is False
