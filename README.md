@@ -9,6 +9,8 @@
 
 **[在线体验](https://aiqiuzhizhe-production.up.railway.app/)** · **[查看自动测试](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions)**
 
+学习与迭代安排见 [`docs/30-day-internship-plan.md`](docs/30-day-internship-plan.md)。
+
 ![AI 求职助手首页](docs/demo.png)
 
 ## 项目亮点
@@ -17,7 +19,7 @@
 - **成本保护**：按IP限流，并缓存相同输入6小时，减少重复API费用。
 - **可靠输出**：使用Pydantic校验模型返回的分数、字段和枚举值。
 - **隐私边界清楚**：截图OCR留在浏览器端；服务端不持久化PDF，并明确披露文本会发送至DeepSeek。
-- **可重复验证**：10项Pytest测试、3条离线契约评测和GitHub Actions持续集成。
+- **可重复验证**：14项Pytest测试（含接口与缓存链路）、3条带人工期望标签的离线质量评测和GitHub Actions持续集成。
 
 ## 处理流程
 
@@ -126,19 +128,19 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-测试覆盖空 JD、超长 JD、错误文件类型、损坏 PDF 和无文字 PDF 等边界情况。
+测试覆盖空 JD、超长 JD、错误文件类型、损坏 PDF、无文字 PDF，以及使用模拟模型响应的 `/analyze` 接口与缓存复用链路。
 
-不消耗模型额度的离线输出结构评测：
+不消耗模型额度的离线输出质量评测：
 
 ```powershell
 python scripts/evaluate_outputs.py
 ```
 
-当前离线评测只验证输出契约和字段完整性，不声称能够证明内容质量。后续会增加人工标注的质量评分。
+评测集为每类岗位保存人工编写的期望标签，包括合理分数区间、必须覆盖的关键点和禁止编造的成果。脚本同时检查 Pydantic 输出契约、关键点召回率和不实表述；当前样例用于验证评测流程，不替代真实用户评价。
 
 ## 后续计划
 
-- 增加 Prompt 版本与人工标注评测集，验证内容质量
+- 扩充到 20 条匿名化岗位样本，对比不同 Prompt 版本
 - 将单机内存限流升级为持久化限流（适用于多实例部署）
-- 增加端到端接口测试
+- 增加浏览器端到端测试
 - 归档未使用的旧版目录

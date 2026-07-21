@@ -1,6 +1,11 @@
 [
   {
     "case_id": "ai_operations_intern",
+    "expectations": {
+      "score_range": [65, 85],
+      "required_terms": ["大模型", "工作流", "评测"],
+      "forbidden_terms": ["精通算法", "百万用户"]
+    },
     "output": {
       "overall_score": 76,
       "strengths": [{"point": "AI工具经验", "detail": "有大模型与工作流项目实践"}],
@@ -11,6 +16,11 @@
   },
   {
     "case_id": "aigc_content_intern",
+    "expectations": {
+      "score_range": [60, 80],
+      "required_terms": ["内容", "平台", "运营数据"],
+      "forbidden_terms": ["百万粉丝", "商业化收入"]
+    },
     "output": {
       "overall_score": 71,
       "strengths": [{"point": "内容工作流", "detail": "能拆解多平台内容生成流程"}],
@@ -21,6 +31,11 @@
   },
   {
     "case_id": "ai_product_intern",
+    "expectations": {
+      "score_range": [65, 85],
+      "required_terms": ["需求", "用户", "OCR"],
+      "forbidden_terms": ["十万用户", "产品负责人"]
+    },
     "output": {
       "overall_score": 73,
       "strengths": [{"point": "需求拆解", "detail": "能从求职痛点设计完整功能链路"}],
