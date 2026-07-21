@@ -25,6 +25,7 @@ STATIC_DIR = BASE_DIR / "static"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_RESUME_CHARS = 30_000
 MAX_JD_CHARS = 15_000
+MAX_TARGET_ROLE_CHARS = 60
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "21600"))
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "5"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
@@ -43,7 +44,7 @@ def _cors_origins() -> list[str]:
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
-app = FastAPI(title="AI 求职助手", version="1.1.0")
+app = FastAPI(title="AI 求职助手", version="1.2.0")
 
 allowed_origins = _cors_origins()
 if allowed_origins:
@@ -110,6 +111,15 @@ def _validate_jd(jd_text: str) -> str:
         raise HTTPException(status_code=400, detail="请输入岗位描述")
     if len(cleaned) > MAX_JD_CHARS:
         raise HTTPException(status_code=413, detail="岗位描述不能超过 15000 字")
+    return cleaned
+
+
+def _validate_target_role(target_role: str) -> str:
+    cleaned = target_role.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="请输入目标岗位名称")
+    if len(cleaned) > MAX_TARGET_ROLE_CHARS:
+        raise HTTPException(status_code=413, detail="目标岗位名称不能超过 60 字")
     return cleaned
 
 
@@ -180,21 +190,27 @@ async def analyze(request: Request, resume: UploadFile = File(...), jd_text: str
 
 
 @app.post("/rewrite-resume")
-async def rewrite_resume(request: Request, resume: UploadFile = File(...), jd_text: str = Form(...)):
+async def rewrite_resume(
+    request: Request,
+    resume: UploadFile = File(...),
+    jd_text: str = Form(...),
+    target_role: str = Form(...),
+):
     resume_text = await _parse_resume(resume)
     jd = _validate_jd(jd_text)
-    cache_key = build_cache_key("rewrite", resume_text, jd)
+    role = _validate_target_role(target_role)
+    cache_key = build_cache_key("rewrite", resume_text, f"{role}\n{jd}")
     cached = response_cache.get(cache_key)
     if cached is not None:
         return cached
     _enforce_rate_limit(request)
     content = await _chat_completion(
         system_prompt=REWRITE_PROMPT,
-        user_prompt=build_rewrite_prompt(resume_text, jd),
-        temperature=0.5,
+        user_prompt=build_rewrite_prompt(resume_text, jd, role),
+        temperature=0.35,
         max_tokens=8192,
     )
-    result = {"rewritten_resume": content}
+    result = {"target_role": role, "rewritten_resume": content}
     response_cache.set(cache_key, result)
     return result
 
