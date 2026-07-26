@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -137,6 +138,43 @@ def _validate_target_role(target_role: str) -> str:
     return cleaned
 
 
+def _infer_target_role(jd_text: str) -> str:
+    """Infer a practical resume title from a JD without another model call."""
+    jd = jd_text.strip()
+    first_lines = [line.strip() for line in jd.splitlines() if line.strip()]
+    for line in first_lines[:5]:
+        candidate = re.sub(r"\s*\d+[Kk千万]?\s*[-—~至]\s*\d+[Kk千万]?\s*(元/月|元/天|/月|/天)?", "", line)
+        candidate = re.sub(r"\s*[·|｜].*$", "", candidate).strip(" -—|｜")
+        looks_like_sentence = candidate.startswith(("负责", "岗位职责", "职位描述", "任职要求")) or any(
+            mark in candidate for mark in ("。", "；", ";", "，", ",")
+        )
+        if not looks_like_sentence and 2 <= len(candidate) <= 35 and any(
+            word in candidate for word in ("实习", "运营", "产品", "剪辑", "AIGC", "AI", "人工智能", "数据")
+        ):
+            return candidate
+
+    rules = [
+        (("短剧", "剪辑"), "AI短剧后期剪辑实习生"),
+        (("产品经理",), "AI产品经理实习生"),
+        (("需求分析", "功能迭代"), "AI产品经理实习生"),
+        (("AIGC", "运营"), "AIGC产品运营实习生"),
+        (("AI", "运营"), "AI产品运营实习生"),
+        (("人工智能", "运营"), "AI产品运营实习生"),
+        (("内容", "运营"), "内容运营实习生"),
+        (("新媒体",), "新媒体运营实习生"),
+        (("跨境", "电商"), "跨境电商运营实习生"),
+        (("数据", "运营"), "数据运营实习生"),
+    ]
+    for keywords, role in rules:
+        if all(keyword.lower() in jd.lower() for keyword in keywords):
+            return role
+    return "AI应用运营实习生"
+
+
+def _resolve_target_role(target_role: str, jd_text: str) -> str:
+    return _validate_target_role(target_role) if target_role.strip() else _infer_target_role(jd_text)
+
+
 def _client_identity(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -208,11 +246,11 @@ async def rewrite_resume(
     request: Request,
     resume: UploadFile = File(...),
     jd_text: str = Form(...),
-    target_role: str = Form(...),
+    target_role: str = Form(""),
 ):
     resume_text = await _parse_resume(resume)
     jd = _validate_jd(jd_text)
-    role = _validate_target_role(target_role)
+    role = _resolve_target_role(target_role, jd)
     cache_key = build_cache_key("rewrite", resume_text, f"{role}\n{jd}")
     cached = response_cache.get(cache_key)
     if cached is not None:

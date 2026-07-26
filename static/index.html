@@ -118,9 +118,9 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 <div class="card-label">岗位描述</div>
 <textarea id="jdInput" placeholder="粘贴 JD 文本到这里..."></textarea>
 <div class="target-role">
-<label for="targetRole">目标岗位名称（生成优化简历时必填）</label>
-<input id="targetRole" maxlength="60" placeholder="例如：AI产品经理实习生">
-<div class="hint">将明确替换简历中原有的求职方向，不会自动编造经历或数据。</div>
+<label for="targetRole">目标岗位名称（选填）</label>
+<input id="targetRole" maxlength="60" placeholder="留空时根据招聘岗位自动判断">
+<div class="hint">通常不用填写；系统会从招聘标题和 JD 自动识别。识别不准时再手动修改。</div>
 </div>
 <div class="dv">或者截图上传（支持多张 / 微信拖拽）</div>
 <div class="upload-zone" id="imgZone">
@@ -340,17 +340,18 @@ document.getElementById('btnRewrite').addEventListener('click',doRewrite);
 async function doRewrite(){
   const f=pz._f,jd=document.getElementById('jdInput').value.trim(),role=document.getElementById('targetRole').value.trim();
   if(!f||!jd){alert('请先上传简历并输入岗位描述');return}
-  if(!role){alert('请输入目标岗位名称，例如“AI产品经理实习生”');document.getElementById('targetRole').focus();return}
   document.getElementById('rwOut').style.display='none';
   document.getElementById('rwLoad').style.display='block';
   document.getElementById('btnRewrite').disabled=true;
-  const fd=new FormData();fd.append('resume',f);fd.append('jd_text',jd);fd.append('target_role',role);
+  const fd=new FormData();fd.append('resume',f);fd.append('jd_text',jd);if(role)fd.append('target_role',role);
   try{
     const res=await fetch('/rewrite-resume',{method:'POST',body:fd});
     if(!res.ok){const e=await res.json();throw new Error(e.detail||'优化失败')}
     const d=await res.json();
+    const resolvedRole=d.target_role||role||'目标岗位';
+    document.getElementById('targetRole').value=resolvedRole;
     document.getElementById('rwBody').textContent=stripMD(d.rewritten_resume||'');
-    document.getElementById('rwTitle').textContent='已针对「'+(d.target_role||role)+'」重写';
+    document.getElementById('rwTitle').textContent='已自动针对「'+resolvedRole+'」重写';
     document.getElementById('rwLoad').style.display='none';
     document.getElementById('rwOut').style.display='block';
     document.getElementById('rwSec').scrollIntoView({behavior:'smooth',block:'start'});

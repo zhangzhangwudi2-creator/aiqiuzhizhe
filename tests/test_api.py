@@ -120,16 +120,29 @@ def test_rewrite_endpoint_uses_explicit_target_role(monkeypatch):
     assert "不得保留原求职岗位" in captured["system_prompt"]
 
 
-def test_rewrite_endpoint_requires_target_role(monkeypatch):
+def test_rewrite_endpoint_infers_target_role(monkeypatch):
+    captured = {}
+
     async def fake_parse_resume(_resume):
         return "匿名简历"
 
+    async def fake_chat_completion(**kwargs):
+        captured.update(kwargs)
+        return "# 匿名用户\n## AI产品经理实习生"
+
     monkeypatch.setattr(main, "_parse_resume", fake_parse_resume)
+    monkeypatch.setattr(main, "_chat_completion", fake_chat_completion)
     client = TestClient(main.app)
     response = client.post(
         "/rewrite-resume",
         files={"resume": ("resume.pdf", b"fake", "application/pdf")},
-        data={"jd_text": "AI产品经理实习生"},
+        data={"jd_text": "AI产品经理（实习生） 150-200元/天\n负责需求分析和功能迭代"},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["target_role"] == "AI产品经理（实习生）"
+    assert "AI产品经理（实习生）" in captured["user_prompt"]
+
+
+def test_infer_target_role_uses_jd_keywords():
+    assert main._infer_target_role("负责海外 AI 短剧后期剪辑、音效和字幕适配") == "AI短剧后期剪辑实习生"
