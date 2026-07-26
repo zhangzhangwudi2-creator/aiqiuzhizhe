@@ -193,7 +193,7 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 <span id="rwTitle">优化后的简历</span>
 <div>
 <button onclick="copyResume()">复制</button>
-<button class="dw" onclick="dlWord()">下载 Word</button>
+<button class="dw" onclick="dlPDF('normal')">下载 PDF（保留照片）</button>
 </div>
 </div>
 <div class="rbd" id="rwBody"></div>
@@ -370,27 +370,23 @@ function copyResume(){
   });
 }
 
-// === 下载 Word ===
-function dlWord(){
-  const t=stripMD(document.getElementById('rwBody').textContent);
+// === 下载真正的 PDF；后端必须提取到原简历照片才会生成 ===
+async function dlPDF(mode){
+  const source=mode==='experimental'?'expBody':'rwBody';
+  const t=document.getElementById(source).textContent;
   if(!t||!t.trim()){alert('请先生成优化简历');return}
-  let body='';
-  for(const l of t.split('\n')){
-    const s=l.trim();
-    if(!s)body+='<p>&nbsp;</p>';
-    else if(s.startsWith('### '))body+='<h3>'+esc(s.slice(4))+'</h3>';
-    else if(s.startsWith('## '))body+='<h2>'+esc(s.slice(3))+'</h2>';
-    else if(s.startsWith('# '))body+='<h1>'+esc(s.slice(2))+'</h1>';
-    else if(s.startsWith('- ')||s.startsWith('* '))body+='<li>'+esc(s.slice(2))+'</li>';
-    else body+='<p>'+esc(s)+'</p>';
-  }
-  const html='<html><head><meta charset=utf-8><style>body{font-family:Arial,SimSun;font-size:11pt;line-height:1.4;color:#000}h1,h2,h3,p,li{color:#000}</style></head><body>'+body+'</body></html>';
-  const blob=new Blob([html],{type:'application/msword'});
-  const url=URL.createObjectURL(blob);
-  const role=(document.getElementById('targetRole').value.trim()||'目标岗位').replace(/[\\/:*?"<>|]/g,'_');
-  const a=document.createElement('a');a.href=url;a.download=role+'_针对性简历.doc';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  if(!pz._f){alert('原简历文件已失效，请重新上传，以便保留照片');return}
+  const role=document.getElementById('targetRole').value.trim()||'目标岗位';
+  const fd=new FormData();fd.append('resume',pz._f);fd.append('rewritten_resume',t);fd.append('target_role',role);
+  try{
+    const res=await fetch('/export-resume-pdf',{method:'POST',body:fd});
+    if(!res.ok){const e=await res.json();throw new Error(e.detail||'PDF 生成失败')}
+    const blob=await res.blob(),url=URL.createObjectURL(blob);
+    const safeRole=role.replace(/[\\/:*?"<>|]/g,'_');
+    const a=document.createElement('a');a.href=url;a.download=safeRole+(mode==='experimental'?'_实验草稿':'_针对性简历')+'.pdf';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){alert(e.message)}
 }
 </script>
 </body>

@@ -38,7 +38,7 @@ JD文本/截图 ──> 浏览器OCR ──┘                            │
 - 匹配度、优势、技能缺口、简历建议和面试问题的结构化分析
 - 针对目标岗位生成简历改写稿
 - 改写时显式指定目标岗位，强制替换原求职方向并以岗位命名下载文件
-- 复制改写结果，或下载 Word 兼容的 `.doc` 文件
+- 下载真正的 PDF 简历：自动提取原 PDF 中的证件照并固定放回页首；未检测到照片时拒绝导出，避免静默生成无照片版本
 - 无需注册；服务端不持久化简历文件
 - 同一输入结果缓存 6 小时，重复查看不再次消耗模型额度
 - 默认每个 IP 每小时最多 5 次未命中缓存的 AI 调用
@@ -54,7 +54,7 @@ JD文本/截图 ──> 浏览器OCR ──┘                            │
 
 - 后端：Python、FastAPI、AsyncOpenAI
 - 模型：DeepSeek `deepseek-chat`
-- PDF：PyPDF
+- PDF：PyPDF（文字/照片提取）、ReportLab（PDF 排版）、Pillow（图片处理），内嵌 Noto Sans SC 中文字体
 - OCR：Tesseract.js（浏览器端）
 - 前端：原生 HTML、CSS、JavaScript
 - 部署：Railway / Nixpacks
@@ -118,6 +118,7 @@ python main.py
 | `GET` | `/` | 前端页面 |
 | `POST` | `/analyze` | 简历与 JD 匹配分析 |
 | `POST` | `/rewrite-resume` | 针对 JD 改写简历 |
+| `POST` | `/export-resume-pdf` | 保留原照片并导出真正的 PDF 简历 |
 | `GET` | `/health` | 服务和 AI 配置状态 |
 
 上传限制：PDF 最大 10MB；提取后的简历最多使用 30,000 字符；JD 最多 15,000 字符。

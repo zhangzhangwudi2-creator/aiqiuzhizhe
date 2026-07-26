@@ -5,11 +5,12 @@ import io
 import json
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from pypdf import PdfReader
@@ -17,6 +18,7 @@ from pypdf import PdfReader
 from prompts import REWRITE_PROMPT, SYSTEM_PROMPT, build_prompt, build_rewrite_prompt
 from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
 from schemas import AnalysisResult
+from pdf_resume import PhotoNotFoundError, build_resume_pdf, extract_profile_photo
 
 load_dotenv()
 
@@ -103,6 +105,18 @@ async def _parse_resume(resume: UploadFile) -> str:
     if len(contents) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="PDF 文件不能超过 10MB")
     return await asyncio.to_thread(_extract_pdf_text, contents)
+
+
+async def _read_resume_pdf(resume: UploadFile) -> bytes:
+    filename = resume.filename or ""
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="请上传 PDF 格式的简历")
+    if resume.content_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=400, detail="文件类型不是 PDF")
+    contents = await resume.read(MAX_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="PDF 文件不能超过 10MB")
+    return contents
 
 
 def _validate_jd(jd_text: str) -> str:
@@ -213,6 +227,43 @@ async def rewrite_resume(
     result = {"target_role": role, "rewritten_resume": content}
     response_cache.set(cache_key, result)
     return result
+
+
+@app.post("/export-resume-pdf")
+async def export_resume_pdf(
+    resume: UploadFile = File(...),
+    rewritten_resume: str = Form(...),
+    target_role: str = Form(...),
+):
+    """Export a real PDF and refuse to silently drop the source photo."""
+    contents = await _read_resume_pdf(resume)
+    role = _validate_target_role(target_role)
+    text = rewritten_resume.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="请先生成优化简历")
+    if len(text) > MAX_RESUME_CHARS:
+        raise HTTPException(status_code=413, detail="优化简历内容不能超过 30000 字")
+    try:
+        photo = await asyncio.to_thread(extract_profile_photo, contents)
+        pdf = await asyncio.to_thread(build_resume_pdf, text, photo, role)
+    except PhotoNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="原 PDF 中未检测到可提取的照片，已停止导出，避免生成无照片简历。请上传带内嵌证件照的 PDF。",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="PDF 生成失败，请确认原简历文件完整") from exc
+
+    safe_name = "".join("_" if c in '\\/:*?\"<>|' else c for c in role)
+    filename = f"{safe_name}_针对性简历.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.get("/health")

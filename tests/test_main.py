@@ -2,9 +2,15 @@ import io
 
 import pytest
 from fastapi import HTTPException, UploadFile
-from pypdf import PdfWriter
+from fastapi.testclient import TestClient
+from PIL import Image as PILImage
+from pypdf import PdfReader, PdfWriter
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 import main
+from pdf_resume import PhotoNotFoundError, build_resume_pdf, extract_profile_photo
 from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
 from schemas import AnalysisResult
 from evaluation.rubric import evaluate_case
@@ -48,6 +54,74 @@ def test_extract_pdf_rejects_invalid_file():
     with pytest.raises(HTTPException) as exc:
         main._extract_pdf_text(b"not a pdf")
     assert exc.value.status_code == 400
+
+
+def _pdf_with_photo() -> bytes:
+    photo = io.BytesIO()
+    PILImage.new("RGB", (180, 240), "#6b8afd").save(photo, format="PNG")
+    photo.seek(0)
+    output = io.BytesIO()
+    page = canvas.Canvas(output, pagesize=A4)
+    page.drawString(50, 780, "Resume")
+    page.drawImage(ImageReader(photo), 450, 700, width=72, height=96, mask="auto")
+    page.save()
+    return output.getvalue()
+
+
+def test_extract_profile_photo_finds_embedded_portrait():
+    extracted = extract_profile_photo(_pdf_with_photo())
+    image = PILImage.open(io.BytesIO(extracted))
+    assert image.width >= 70
+    assert image.height >= 70
+
+
+def test_extract_profile_photo_rejects_pdf_without_photo():
+    output = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.write(output)
+    with pytest.raises(PhotoNotFoundError):
+        extract_profile_photo(output.getvalue())
+
+
+def test_build_resume_pdf_keeps_photo_and_text():
+    photo = extract_profile_photo(_pdf_with_photo())
+    result = build_resume_pdf(
+        "张凡\nAI产品经理实习生\n19306241281 | 杭州\nhttps://github.com/example\n项目经历\n- 完成需求分析与产品迭代",
+        photo,
+        "AI产品经理实习生",
+    )
+    reader = PdfReader(io.BytesIO(result))
+    assert len(reader.pages) == 1
+    assert len(reader.pages[0].images) >= 1
+    assert "张凡" in (reader.pages[0].extract_text() or "")
+
+
+def test_export_pdf_endpoint_returns_real_pdf_with_photo():
+    client = TestClient(main.app)
+    response = client.post(
+        "/export-resume-pdf",
+        files={"resume": ("resume.pdf", _pdf_with_photo(), "application/pdf")},
+        data={"rewritten_resume": "张凡\n项目经历\n- 完成产品迭代", "target_role": "AI产品实习生"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_export_pdf_endpoint_refuses_to_drop_photo():
+    output = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.write(output)
+    client = TestClient(main.app)
+    response = client.post(
+        "/export-resume-pdf",
+        files={"resume": ("resume.pdf", output.getvalue(), "application/pdf")},
+        data={"rewritten_resume": "张凡\n项目经历", "target_role": "AI产品实习生"},
+    )
+    assert response.status_code == 422
+    assert "停止导出" in response.json()["detail"]
 
 
 def test_analysis_schema_accepts_valid_output():
