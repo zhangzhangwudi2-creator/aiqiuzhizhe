@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI求职助手发布检查"
+  short_description: "提交推送上线前检查 git 改动、测试、文档与线上状态"
+  default_prompt: "Use $aiqiuzhizhe-release-check to review and release the current changes."

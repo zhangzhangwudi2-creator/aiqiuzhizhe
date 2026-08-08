@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI求职助手线上排查"
+  short_description: "按固定顺序诊断 Railway/DeepSeek/限流/缓存/PDF 等线上故障"
+  default_prompt: "Use $aiqiuzhizhe-incident-diagnosis to diagnose the reported online issue."

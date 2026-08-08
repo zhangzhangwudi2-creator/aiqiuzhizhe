@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI求职助手简历包装复核"
+  short_description: "把项目经历整理成可核实、不夸大的简历内容，面向AI应用开发实习生"
+  default_prompt: "Use $aiqiuzhizhe-resume-proof to turn this project experience into resume bullets."

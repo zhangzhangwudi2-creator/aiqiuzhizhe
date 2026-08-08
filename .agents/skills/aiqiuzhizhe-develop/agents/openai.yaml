@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI求职助手开发"
+  short_description: "执行 aiqiuzhizhe 中等粒度开发：先读代码、限定范围、补测试、跑验证"
+  default_prompt: "Use $aiqiuzhizhe-develop to implement the next scoped feature with tests and verification."
