@@ -115,7 +115,7 @@ def test_rewrite_endpoint_uses_explicit_target_role(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["target_role"] == "AI产品经理实习生"
-    assert "## 目标岗位（必须替换原求职方向）" in captured["user_prompt"]
+    assert "<TARGET_ROLE>" in captured["user_prompt"]
     assert "AI产品经理实习生" in captured["user_prompt"]
     assert "不得保留原求职岗位" in captured["system_prompt"]
 
