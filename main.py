@@ -20,6 +20,7 @@ from prompts import REWRITE_PROMPT, SYSTEM_PROMPT, build_prompt, build_rewrite_p
 from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
 from schemas import AnalysisResult
 from pdf_resume import PhotoNotFoundError, build_resume_pdf, extract_profile_photo
+from fact_guard import RewriteFactError, validate_rewrite_facts
 
 load_dotenv()
 
@@ -290,6 +291,13 @@ async def rewrite_resume(
         temperature=0.35,
         max_tokens=8192,
     )
+    try:
+        validate_rewrite_facts(resume_text, content)
+    except RewriteFactError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="AI 改写结果未通过事实一致性校验，请重试或补充更明确的原始简历信息",
+        ) from exc
     result = {"target_role": role, "rewritten_resume": content}
     response_cache.set(cache_key, result)
     return result

@@ -120,6 +120,27 @@ def test_rewrite_endpoint_uses_explicit_target_role(monkeypatch):
     assert "不得保留原求职岗位" in captured["system_prompt"]
 
 
+def test_rewrite_endpoint_rejects_fabricated_facts(monkeypatch):
+    async def fake_parse_resume(_resume):
+        return "测试候选人\n某大学\n杭州"
+
+    async def fake_chat_completion(**_kwargs):
+        return "# 张伟\nXX大学\n北京"
+
+    monkeypatch.setattr(main, "_parse_resume", fake_parse_resume)
+    monkeypatch.setattr(main, "_chat_completion", fake_chat_completion)
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/rewrite-resume",
+        files={"resume": ("resume.pdf", b"fake", "application/pdf")},
+        data={"jd_text": "AI产品运营实习生", "target_role": "AI产品运营实习生"},
+    )
+
+    assert response.status_code == 502
+    assert "事实一致性校验" in response.json()["detail"]
+
+
 def test_analyze_returns_429_when_rate_limit_exceeded(monkeypatch):
     async def fake_parse_resume(_resume):
         return "同一份匿名简历"
