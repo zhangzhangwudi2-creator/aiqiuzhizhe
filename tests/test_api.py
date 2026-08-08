@@ -120,6 +120,31 @@ def test_rewrite_endpoint_uses_explicit_target_role(monkeypatch):
     assert "不得保留原求职岗位" in captured["system_prompt"]
 
 
+def test_analyze_returns_429_when_rate_limit_exceeded(monkeypatch):
+    async def fake_parse_resume(_resume):
+        return "同一份匿名简历"
+
+    async def fake_chat_completion(**_kwargs):
+        return json.dumps(VALID_ANALYSIS, ensure_ascii=False)
+
+    monkeypatch.setattr(main, "_parse_resume", fake_parse_resume)
+    monkeypatch.setattr(main, "_chat_completion", fake_chat_completion)
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "false")
+
+    client = TestClient(main.app)
+    response = None
+    for index in range(main.RATE_LIMIT_REQUESTS + 1):
+        response = client.post(
+            "/analyze",
+            files={"resume": ("resume.pdf", b"fake", "application/pdf")},
+            data={"jd_text": f"AI 应用实习生 {index}"},
+            headers={"X-Forwarded-For": f"1.2.3.{index}"},
+        )
+
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+
+
 def test_rewrite_endpoint_infers_target_role(monkeypatch):
     captured = {}
 

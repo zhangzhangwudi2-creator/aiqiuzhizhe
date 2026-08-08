@@ -166,6 +166,39 @@ def test_rate_limiter_blocks_after_limit():
     assert retry_after > 0
 
 
+def test_client_identity_trusts_rightmost_forwarded_hop():
+    identity = main._client_identity_from_parts(
+        "1.2.3.4, 5.6.7.8",
+        "203.0.113.1",
+        trust_forwarded=True,
+    )
+    assert identity == "5.6.7.8"
+
+
+def test_client_identity_ignores_forwarded_when_not_trusted():
+    identity = main._client_identity_from_parts(
+        "1.2.3.4, 5.6.7.8",
+        "203.0.113.1",
+        trust_forwarded=False,
+    )
+    assert identity == "203.0.113.1"
+
+
+def test_client_identity_handles_empty_forwarded():
+    assert (
+        main._client_identity_from_parts("  ,  ", None, trust_forwarded=True)
+        == "unknown"
+    )
+    assert (
+        main._client_identity_from_parts("", "203.0.113.1", trust_forwarded=True)
+        == "203.0.113.1"
+    )
+    assert (
+        main._client_identity_from_parts("1.2.3.4", None, trust_forwarded=True)
+        == "1.2.3.4"
+    )
+
+
 def test_quality_rubric_accepts_matching_output():
     case = {
         "case_id": "demo",

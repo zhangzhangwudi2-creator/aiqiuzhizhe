@@ -176,10 +176,38 @@ def _resolve_target_role(target_role: str, jd_text: str) -> str:
 
 
 def _client_identity(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()
-    return request.client.host if request.client else "unknown"
+    return _client_identity_from_parts(
+        request.headers.get("x-forwarded-for", ""),
+        request.client.host if request.client else None,
+        _trust_x_forwarded_for(),
+    )
+
+
+def _client_identity_from_parts(
+    forwarded_for: str,
+    client_host: str | None,
+    trust_forwarded: bool,
+) -> str:
+    """Return the identity used for rate limiting.
+
+    When a trusted proxy (Railway, nginx) is in front, the rightmost
+    X-Forwarded-For hop is appended by the proxy itself, so a client cannot
+    spoof it. When running without a proxy, the real peer is client_host.
+    """
+    if trust_forwarded:
+        entries = [entry.strip() for entry in forwarded_for.split(",") if entry.strip()]
+        if entries:
+            return entries[-1]
+    return client_host if client_host else "unknown"
+
+
+def _trust_x_forwarded_for() -> bool:
+    return os.getenv("TRUST_X_FORWARDED_FOR", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _enforce_rate_limit(request: Request) -> None:
