@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -90,43 +90,60 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 .bg:hover{transform:translateY(-1px)}
 .bg:disabled{opacity:.6;cursor:default}
 </style>
+<link rel="stylesheet" href="/static/app.css?v=20260808">
 </head>
 <body>
 
+<nav class="topbar" aria-label="主导航">
+<div class="brand"><span class="brand-mark">职</span><span>AI 求职助手</span></div>
+<div class="top-note">文件仅用于本次分析，不会保存</div>
+</nav>
+
 <div class="header">
-<div class="container">
-<h1>AI <span>求职助手</span></h1>
-<p>上传简历 · 匹配分析 · 简历优化</p>
+<div class="hero">
+<div class="eyebrow">AI Career Copilot</div>
+<h1>让每一次投递，<br><span>都更接近 Offer</span></h1>
+<p>上传你的简历和目标岗位，几分钟内获得匹配度分析、技能缺口与可直接执行的简历优化建议。</p>
+<div class="hero-points"><span>岗位精准匹配</span><span>面试问题预测</span><span>一键优化简历</span></div>
 </div>
 </div>
 
 <div class="container">
 <div class="input-section">
+<div class="workspace">
+<div class="workspace-head">
+<div><div class="workspace-title">开始一次岗位匹配</div><div class="workspace-subtitle">准备好简历与岗位描述，剩下的交给 AI</div></div>
+<div class="privacy-note">隐私安全 · 不保存文件</div>
+</div>
 <div class="input-grid">
 
 <div class="card">
-<div class="card-label">简历 (PDF)</div>
-<div class="upload-zone" id="pdfZone">
+<div class="card-label"><span class="step-number">1</span>上传简历 <span class="card-hint">PDF · 最大 10MB</span></div>
+<div class="upload-zone" id="pdfZone" role="button" tabindex="0" aria-label="上传 PDF 简历">
 <input type="file" id="pdfInput" accept=".pdf">
-<div style="font-size:28px;margin-bottom:6px">+</div>
-<div class="upload-text">拖拽简历到这里，或 <strong>点击选择</strong></div>
+<div class="upload-icon">↑</div>
+<div class="upload-text">拖拽文件到这里，或 <strong>点击选择</strong></div>
+<div class="upload-meta">支持中文与英文 PDF 简历</div>
 <div class="file-name" id="pdfName"></div>
 </div>
 </div>
 
 <div class="card">
-<div class="card-label">岗位描述</div>
-<textarea id="jdInput" placeholder="粘贴 JD 文本到这里..."></textarea>
+<div class="card-label"><span class="step-number">2</span>添加岗位描述 <span class="card-hint">文字或截图</span></div>
+<div class="jd-wrap">
+<textarea id="jdInput" placeholder="粘贴完整的职位描述，例如岗位职责、任职要求、加分项……"></textarea>
+<span class="char-count" id="charCount">0 字</span>
+</div>
 <div class="target-role">
 <label for="targetRole">目标岗位名称（选填）</label>
 <input id="targetRole" maxlength="60" placeholder="留空时根据招聘岗位自动判断">
 <div class="hint">通常不用填写；系统会从招聘标题和 JD 自动识别。识别不准时再手动修改。</div>
 </div>
-<div class="dv">或者截图上传（支持多张 / 微信拖拽）</div>
-<div class="upload-zone" id="imgZone">
+<div class="divider">或者上传 JD 截图自动识别</div>
+<div class="upload-zone" id="imgZone" role="button" tabindex="0" aria-label="上传岗位截图">
 <input type="file" id="imgInput" accept="image/*" multiple>
-<div style="font-size:22px;margin-bottom:4px">+</div>
-<div class="upload-text">拖拽截图到这里，或 <strong>点击选择</strong></div>
+<div class="upload-icon">+</div>
+<div class="upload-text">选择或拖入截图 <strong>支持多张</strong></div>
 <div class="file-name" id="imgName"></div>
 </div>
 <div class="op" id="ocrProg">
@@ -138,8 +155,12 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 
 </div>
 
+<div class="workspace-action">
+<div class="action-copy"><strong>准备好了吗？</strong>AI 将从匹配度、技能、简历表达和面试四个维度进行分析</div>
 <div class="btn-wrapper">
-<button class="btn-analyze" id="btnAnalyze">分析</button>
+<button class="btn-analyze" id="btnAnalyze" disabled>开始智能分析</button>
+</div>
+</div>
 </div>
 
 <div class="loading" id="loading">
@@ -155,11 +176,12 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 <div class="error" id="errBox"></div>
 
 <div class="results" id="results">
+<div class="result-heading"><div><h2>岗位匹配报告</h2><p>基于你的简历与目标岗位生成</p></div><p>建议优先处理高优先级项目</p></div>
 <div class="score-card">
-<div class="l">综合匹配度</div>
 <div class="score-ring" id="scoreRing">
 <div><span id="scoreNum">--</span></div>
 </div>
+<div class="score-copy"><div class="l">综合匹配度</div><strong>你的岗位竞争力概览</strong><p>分数越高，代表简历经历与岗位要求越契合</p></div>
 </div>
 <div class="rg">
 <div class="rc s1">
@@ -182,9 +204,9 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 </div>
 
 <div class="rw" id="rwSec">
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+<div class="rewrite-head">
+<div class="rewrite-copy"><strong>生成一份更匹配该岗位的简历</strong><span>只优化表达与结构，不编造不存在的经历</span></div>
 <button class="bg" id="btnRewrite">生成优化简历</button>
-<span style="font-size:11px;color:#94a3b8">替换求职目标，并按 JD 重排经历与关键词</span>
 </div>
 <div class="rl" id="rwLoad"><div class="spinner"></div><div class="loading-text">正在优化简历...</div></div>
 <div class="ro" id="rwOut">
@@ -193,7 +215,8 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 <span id="rwTitle">优化后的简历</span>
 <div>
 <button onclick="copyResume()">复制</button>
-<button class="dw" onclick="dlPDF('normal')">下载 PDF（保留照片）</button>
+<button class="dw" onclick="dlPDF()">下载 PDF（保留照片）</button>
+<button class="dw" onclick="dlWord()">下载 Word</button>
 </div>
 </div>
 <div class="rbd" id="rwBody"></div>
@@ -204,12 +227,13 @@ footer{text-align:center;padding:24px 20px;font-size:12px;color:#94a3b8}
 </div>
 </div>
 
-<footer>AI 求职助手 · DeepSeek API · 个人作品集</footer>
+<footer>AI 求职助手 · 让求职准备更有方向</footer>
 
 <script>
 // === PDF 上传 ===
 const pz=document.getElementById('pdfZone'),pi=document.getElementById('pdfInput'),pn=document.getElementById('pdfName');
 pz.addEventListener('click',()=>pi.click());
+pz.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pi.click()}});
 pz.addEventListener('dragover',e=>{e.preventDefault();pz.classList.add('dragover')});
 pz.addEventListener('dragleave',()=>pz.classList.remove('dragover'));
 pz.addEventListener('drop',e=>{e.preventDefault();pz.classList.remove('dragover');if(e.dataTransfer.files.length)loadPDF(e.dataTransfer.files[0])});
@@ -217,7 +241,7 @@ pi.addEventListener('change',e=>{if(e.target.files.length)loadPDF(e.target.files
 function loadPDF(f){
   if(f.type!=='application/pdf'){alert('请上传 PDF 文件');return}
   if(f.size>10*1024*1024){alert('文件不能超过 10MB');return}
-  pz.classList.add('has-file');pn.textContent=f.name+' ('+(f.size/1024).toFixed(1)+' KB)';pn.classList.add('show');pz._f=f;
+  pz.classList.add('has-file');pn.textContent='✓ '+f.name+' · '+(f.size/1024).toFixed(1)+' KB';pn.classList.add('show');pz._f=f;updateReadiness();
 }
 
 // === OCR 截图识别 ===
@@ -227,6 +251,7 @@ const ost=document.getElementById('ocrStatus');
 let busy=false,totalImg=0,allTxt=[];
 
 iz.addEventListener('click',()=>{if(!busy)ii.click()});
+iz.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!busy){e.preventDefault();ii.click()}});
 iz.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();iz.classList.add('dragover')});
 iz.addEventListener('dragleave',e=>{e.preventDefault();e.stopPropagation();iz.classList.remove('dragover')});
 iz.addEventListener('drop',e=>{
@@ -246,7 +271,7 @@ function addImgs(fs){
 async function runOCR(fs,idx){
   if(idx===undefined)idx=0;
   if(!fs[idx]){ocrDone();return}
-  busy=true;
+  busy=true;updateReadiness();
   const f=fs[idx],seq=totalImg+1;
   inm.textContent='['+seq+'] '+f.name;
   ofl.style.width=((idx/fs.length)*80)+'%';
@@ -264,6 +289,7 @@ async function runOCR(fs,idx){
     else otx.textContent='跳过 ('+seq+') 未识别到文字';
   }catch(e){otx.textContent='失败 ('+seq+') '+e.message.substring(0,30)}
   document.getElementById('jdInput').value=allTxt.join('\n\n---\n\n');
+  updateReadiness();
   await new Promise(r=>setTimeout(r,100));
   if(idx+1<fs.length)await runOCR(fs,idx+1);else ocrDone();
 }
@@ -272,36 +298,42 @@ function ocrDone(){
   ofl.style.width='100%';otx.textContent='完成！共 '+totalImg+' 张，'+tc+' 字';
   if(tc<20){ost.style.display='block';ost.style.background='#fffbeb';ost.style.color='#d97706';ost.style.border='1px solid #fde68a';ost.textContent='识别文字较少，请检查截图是否清晰'}
   else{ost.style.display='block';ost.style.background='#f0fdf4';ost.style.color='#16a34a';ost.style.border='1px solid #bbf7d0';ost.textContent=totalImg+' 张截图，'+tc+' 字。可继续添加'}
-  busy=false;document.getElementById('jdInput').focus();
+  busy=false;updateReadiness();document.getElementById('jdInput').focus();
   setTimeout(()=>{opb.style.display='none';inm.textContent='已识别 '+totalImg+' 张，可继续添加'},4000);
 }
 
 // === 分析 ===
 document.getElementById('btnAnalyze').addEventListener('click',analyze);
+const jdInput=document.getElementById('jdInput'),charCount=document.getElementById('charCount'),analyzeBtn=document.getElementById('btnAnalyze');
+function updateReadiness(){
+  const n=jdInput.value.length;
+  charCount.textContent=n.toLocaleString()+' 字';
+  analyzeBtn.disabled=!(pz._f&&jdInput.value.trim())||busy;
+}
+jdInput.addEventListener('input',updateReadiness);
+updateReadiness();
 async function analyze(){
   const f=pz._f,jd=document.getElementById('jdInput').value.trim();
   if(!f){alert('请上传简历');return}
   if(!jd){alert('请输入岗位描述');return}
   document.getElementById('errBox').classList.remove('show');
   document.getElementById('results').classList.remove('show');
-  document.getElementById('btnAnalyze').disabled=true;
+  analyzeBtn.disabled=true;analyzeBtn.textContent='正在分析';
   document.getElementById('loading').classList.add('show');
   document.getElementById('s1').className='on';
   const fd=new FormData();fd.append('resume',f);fd.append('jd_text',jd);
   try{
-    await new Promise(r=>setTimeout(r,500));
     document.getElementById('s1').className='ok';document.getElementById('s2').className='on';
     const res=await fetch('/analyze',{method:'POST',body:fd});
     document.getElementById('s2').className='ok';document.getElementById('s3').className='on';
     if(!res.ok){const e=await res.json();throw new Error(e.detail||'分析失败')}
     const d=await res.json();
-    await new Promise(r=>setTimeout(r,300));
-    document.getElementById('s3').className='ok';await new Promise(r=>setTimeout(r,300));
+    document.getElementById('s3').className='ok';
     showRes(d);
   }catch(e){
     const el=document.getElementById('errBox');el.textContent=e.message||'错误';el.classList.add('show');
   }finally{
-    document.getElementById('btnAnalyze').disabled=false;document.getElementById('loading').classList.remove('show');
+    analyzeBtn.textContent='重新分析';document.getElementById('loading').classList.remove('show');updateReadiness();
   }
 }
 function showRes(d){
@@ -329,6 +361,10 @@ function showRes(d){
     }).join('');
   }
   rd(d.strengths,'lc1');rd(d.skill_gaps,'lc2');rd(d.resume_tips,'lc3');rd(d.interview_questions,'lc4');
+  document.getElementById('sc1').textContent=(d.strengths||[]).length;
+  document.getElementById('sc2').textContent=(d.skill_gaps||[]).length;
+  document.getElementById('sc3').textContent=(d.resume_tips||[]).length;
+  document.getElementById('sc4').textContent=(d.interview_questions||[]).length;
   document.getElementById('results').classList.add('show');
   document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -371,10 +407,9 @@ function copyResume(){
   });
 }
 
-// === 下载真正的 PDF；后端必须提取到原简历照片才会生成 ===
-async function dlPDF(mode){
-  const source=mode==='experimental'?'expBody':'rwBody';
-  const t=document.getElementById(source).textContent;
+// === 下载 PDF（保留照片）；后端必须提取到原简历照片才会生成 ===
+async function dlPDF(){
+  const t=document.getElementById('rwBody').textContent;
   if(!t||!t.trim()){alert('请先生成优化简历');return}
   if(!pz._f){alert('原简历文件已失效，请重新上传，以便保留照片');return}
   const role=document.getElementById('targetRole').value.trim()||'目标岗位';
@@ -384,10 +419,32 @@ async function dlPDF(mode){
     if(!res.ok){const e=await res.json();throw new Error(e.detail||'PDF 生成失败')}
     const blob=await res.blob(),url=URL.createObjectURL(blob);
     const safeRole=role.replace(/[\\/:*?"<>|]/g,'_');
-    const a=document.createElement('a');a.href=url;a.download=safeRole+(mode==='experimental'?'_实验草稿':'_针对性简历')+'.pdf';
+    const a=document.createElement('a');a.href=url;a.download=safeRole+'_针对性简历.pdf';
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(e){alert(e.message)}
+}
+
+// === 下载 Word（浏览器端生成草稿） ===
+function dlWord(){
+  const t=stripMD(document.getElementById('rwBody').textContent);
+  if(!t||!t.trim()){alert('请先生成优化简历');return}
+  let body='';
+  for(const l of t.split('\n')){
+    const s=l.trim();
+    if(!s)body+='<p>&nbsp;</p>';
+    else if(s.startsWith('### '))body+='<h3>'+esc(s.slice(4))+'</h3>';
+    else if(s.startsWith('## '))body+='<h2>'+esc(s.slice(3))+'</h2>';
+    else if(s.startsWith('# '))body+='<h1>'+esc(s.slice(2))+'</h1>';
+    else if(s.startsWith('- ')||s.startsWith('* '))body+='<li>'+esc(s.slice(2))+'</li>';
+    else body+='<p>'+esc(s)+'</p>';
+  }
+  const html='<html><head><meta charset=utf-8><style>body{font-family:Arial,SimSun;font-size:11pt;line-height:1.4;color:#000}h1,h2,h3,p,li{color:#000}</style></head><body>'+body+'</body></html>';
+  const blob=new Blob([html],{type:'application/msword'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='优化简历.doc';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
