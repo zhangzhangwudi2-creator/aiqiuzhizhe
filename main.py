@@ -32,6 +32,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_RESUME_CHARS = 30_000
+MIN_RESUME_CHARS = 20
 MAX_JD_CHARS = 15_000
 MAX_TARGET_ROLE_CHARS = 60
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "21600"))
@@ -111,6 +112,22 @@ async def _parse_resume(resume: UploadFile) -> str:
     if len(contents) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="PDF 文件不能超过 10MB")
     return await asyncio.to_thread(_extract_pdf_text, contents)
+
+
+def _validate_resume_text(resume_text: str) -> str:
+    cleaned = resume_text.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="请上传 PDF 简历或粘贴简历文本")
+    if len(cleaned) < MIN_RESUME_CHARS:
+        raise HTTPException(status_code=400, detail="简历内容过短，请补充更多经历信息")
+    return cleaned[:MAX_RESUME_CHARS]
+
+
+async def _resolve_resume_text(resume: UploadFile | None, resume_text: str) -> str:
+    """优先使用上传的 PDF；未上传时使用直接粘贴的简历文本。"""
+    if resume is not None and (resume.filename or "").strip():
+        return await _parse_resume(resume)
+    return _validate_resume_text(resume_text)
 
 
 async def _read_resume_pdf(resume: UploadFile) -> bytes:
@@ -251,8 +268,13 @@ async def _chat_completion(*, system_prompt: str, user_prompt: str, temperature:
 
 
 @app.post("/analyze")
-async def analyze(request: Request, resume: UploadFile = File(...), jd_text: str = Form(...)):
-    resume_text = await _parse_resume(resume)
+async def analyze(
+    request: Request,
+    resume: UploadFile | None = File(None),
+    jd_text: str = Form(...),
+    resume_text: str = Form(""),
+):
+    resume_text = await _resolve_resume_text(resume, resume_text)
     jd = _validate_jd(jd_text)
     cache_key = build_cache_key("analyze", resume_text, jd)
     cached = response_cache.get(cache_key)
@@ -277,11 +299,12 @@ async def analyze(request: Request, resume: UploadFile = File(...), jd_text: str
 @app.post("/rewrite-resume")
 async def rewrite_resume(
     request: Request,
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
     jd_text: str = Form(...),
     target_role: str = Form(""),
+    resume_text: str = Form(""),
 ):
-    resume_text = await _parse_resume(resume)
+    resume_text = await _resolve_resume_text(resume, resume_text)
     jd = _validate_jd(jd_text)
     role = _resolve_target_role(target_role, jd)
     cache_key = build_cache_key("rewrite", resume_text, f"{role}\n{jd}")

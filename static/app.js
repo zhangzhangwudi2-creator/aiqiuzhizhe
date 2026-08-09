@@ -15,6 +15,8 @@ function friendlyDetail(status, detail) {
   const d = (detail || '').toString();
   if (status === 400) {
     if (d.includes('请输入岗位描述')) return '请先填写岗位描述';
+    if (d.includes('请上传 PDF 简历或粘贴简历文本')) return '请先提供简历：上传 PDF，或直接粘贴简历文本';
+    if (d.includes('简历内容过短')) return '简历内容过短，请补充更多经历信息';
     if (d.includes('PDF 解析失败')) return '简历解析失败：文件可能已损坏，请确认后重新上传';
     if (d.includes('无法从 PDF 中提取文字')) return '未能从简历中提取到文字，请改用文字版 PDF 简历';
     if (d.includes('请上传 PDF')) return '请选择 PDF 格式的简历文件';
@@ -51,6 +53,8 @@ function retryAfterMessage(res) {
 const pz = document.getElementById('pdfZone');
 const pi = document.getElementById('pdfInput');
 const pn = document.getElementById('pdfName');
+const resumeTextInput = document.getElementById('resumeTextInput');
+const resumeTextHint = document.getElementById('resumeTextHint');
 
 pz.addEventListener('click', () => pi.click());
 pz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pi.click(); } });
@@ -74,6 +78,23 @@ function loadPDF(f) {
   pz._f = f;
   updateReadiness();
 }
+
+function currentResumeText() {
+  return resumeTextInput.value.trim();
+}
+
+function hasResume() {
+  return !!(pz._f) || currentResumeText().length > 0;
+}
+
+resumeTextInput.addEventListener('input', () => {
+  updateReadiness();
+  if (pz._f && currentResumeText()) {
+    resumeTextHint.textContent = '已同时提供 PDF 与文本，分析将优先使用 PDF 内容';
+  } else {
+    resumeTextHint.textContent = '上传 PDF 简历，或直接粘贴简历文本';
+  }
+});
 
 // === OCR 截图识别 ===
 const iz = document.getElementById('imgZone');
@@ -196,15 +217,16 @@ document.getElementById('btnAnalyze').addEventListener('click', analyze);
 function updateReadiness() {
   const n = jdInput.value.length;
   charCount.textContent = n.toLocaleString() + ' 字';
-  analyzeBtn.disabled = !(pz._f && jdInput.value.trim()) || busy;
+  analyzeBtn.disabled = !(hasResume() && jdInput.value.trim()) || busy;
 }
 jdInput.addEventListener('input', updateReadiness);
 updateReadiness();
 
 async function analyze() {
   const f = pz._f;
+  const rt = currentResumeText();
   const jd = jdInput.value.trim();
-  if (!f) { alert('请先上传 PDF 简历'); return; }
+  if (!f && !rt) { alert('请先提供简历：上传 PDF，或直接粘贴简历文本'); return; }
   if (!jd) { alert('请先填写岗位描述'); return; }
   hideError();
   document.getElementById('results').classList.remove('show');
@@ -213,7 +235,11 @@ async function analyze() {
   document.getElementById('loading').classList.add('show');
   document.getElementById('s1').className = 'on';
   const fd = new FormData();
-  fd.append('resume', f);
+  if (f) {
+    fd.append('resume', f);
+  } else {
+    fd.append('resume_text', rt);
+  }
   fd.append('jd_text', jd);
   try {
     document.getElementById('s1').className = 'ok';
@@ -231,7 +257,11 @@ async function analyze() {
     showRes(d);
   } catch (e) {
     document.getElementById('s3').className = 'on';
-    showError(e.message || '分析失败，请重试');
+    const msg = e.message || '分析失败，请重试';
+    if (msg.includes('解析失败') || msg.includes('未能从简历中提取到文字')) {
+      resumeTextHint.textContent = 'PDF 解析失败，你也可以直接粘贴简历文本继续分析。';
+    }
+    showError(msg);
   } finally {
     analyzeBtn.textContent = '重新分析';
     document.getElementById('loading').classList.remove('show');
@@ -288,6 +318,7 @@ function showRes(d) {
   document.getElementById('sc4').textContent = (d.interview_questions || []).length;
   document.getElementById('results').classList.add('show');
   document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  lastAnalysis = d;
 }
 
 function esc(t) {
@@ -321,15 +352,20 @@ function isNeutralRole(role) {
 
 async function doRewrite() {
   const f = pz._f;
+  const rt = currentResumeText();
   const jd = jdInput.value.trim();
   const role = document.getElementById('targetRole').value.trim();
-  if (!f || !jd) { alert('请先上传简历并填写岗位描述'); return; }
+  if ((!f && !rt) || !jd) { alert('请先提供简历（上传 PDF 或粘贴文本）并填写岗位描述'); return; }
   hideError();
   rwOut.style.display = 'none';
   rwLoad.style.display = 'block';
   btnRewrite.disabled = true;
   const fd = new FormData();
-  fd.append('resume', f);
+  if (f) {
+    fd.append('resume', f);
+  } else {
+    fd.append('resume_text', rt);
+  }
   fd.append('jd_text', jd);
   if (role) fd.append('target_role', role);
   try {
@@ -358,6 +394,74 @@ async function doRewrite() {
   } finally {
     btnRewrite.disabled = false;
   }
+}
+
+// === 分析报告导出（前端生成 Markdown，不依赖后端） ===
+let lastAnalysis = null;
+
+function buildReportMarkdown(d) {
+  const lines = [];
+  lines.push('# 岗位匹配报告');
+  lines.push('');
+  lines.push('综合匹配度：' + (Number.isFinite(d.overall_score) ? d.overall_score : '暂无数据') + ' / 100');
+  lines.push('');
+
+  function section(title, list, fmt) {
+    lines.push('## ' + title);
+    if (!Array.isArray(list) || !list.length) {
+      lines.push('- 暂无数据');
+      lines.push('');
+      return;
+    }
+    list.forEach(item => lines.push('- ' + fmt(item)));
+    lines.push('');
+  }
+
+  section('优势', d.strengths, i => [i.point, i.detail].filter(Boolean).join('：'));
+  section('技能缺口', d.skill_gaps, i => {
+    const parts = [];
+    if (i.skill) parts.push(i.skill);
+    if (i.importance) parts.push(i.importance + '优先级');
+    if (i.current_status) parts.push('现状：' + i.current_status);
+    if (i.improvement_suggestion) parts.push('建议：' + i.improvement_suggestion);
+    return parts.join('；');
+  });
+  section('简历修改建议', d.resume_tips, i => {
+    const parts = [];
+    if (i.section) parts.push(i.section);
+    if (i.issue) parts.push('问题：' + i.issue);
+    if (i.rewrite_suggestion) parts.push('建议：' + i.rewrite_suggestion);
+    return parts.join('；');
+  });
+  section('面试问题', d.interview_questions, i => {
+    const parts = [];
+    if (i.question) parts.push(i.question);
+    if (i.difficulty) parts.push('难度：' + i.difficulty);
+    if (i.intent) parts.push('考察点：' + i.intent);
+    return parts.join('；');
+  });
+  return lines.join('\n');
+}
+
+function copyReport() {
+  if (!lastAnalysis) { alert('请先完成一次简历分析'); return; }
+  navigator.clipboard.writeText(buildReportMarkdown(lastAnalysis)).then(() => {
+    alert('分析报告已复制');
+  });
+}
+
+function downloadReport() {
+  if (!lastAnalysis) { alert('请先完成一次简历分析'); return; }
+  const md = buildReportMarkdown(lastAnalysis);
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '岗位匹配报告.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // === 复制优化简历 ===

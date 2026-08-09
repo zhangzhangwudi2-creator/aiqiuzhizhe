@@ -42,6 +42,11 @@
 <div class="upload-meta">支持中文与英文 PDF 简历</div>
 <div class="file-name" id="pdfName"></div>
 </div>
+<div class="divider">或者直接粘贴简历文本</div>
+<div class="jd-wrap">
+<textarea id="resumeTextInput" placeholder="粘贴简历正文（姓名、教育经历、项目经历、技能等）……"></textarea>
+</div>
+<div class="resume-text-hint" id="resumeTextHint">上传 PDF 简历，或直接粘贴简历文本</div>
 </div>
 
 <div class="card">
@@ -92,7 +97,7 @@
 <div class="error" id="errBox"></div>
 
 <div class="results" id="results">
-<div class="result-heading"><div><h2>岗位匹配报告</h2><p>基于你的简历与目标岗位生成</p></div><p>建议优先处理高优先级项目</p></div>
+<div class="result-heading"><div><h2>岗位匹配报告</h2><p>基于你的简历与目标岗位生成</p></div><div class="result-actions"><button class="bg sm" onclick="copyReport()">复制分析报告</button><button class="bg sm" onclick="downloadReport()">下载报告（Markdown）</button></div></div>
 <div class="score-card">
 <div class="score-ring" id="scoreRing">
 <div><span id="scoreNum">--</span></div>
@@ -132,7 +137,7 @@
 <div>
 <button onclick="copyResume()">复制</button>
 <button class="dw" onclick="dlPDF()">下载 PDF（保留照片）</button>
-<button class="dw" onclick="dlWord()">下载 Word</button>
+<button class="dw" onclick="dlWord()">下载 Word 兼容文档（.doc）</button>
 </div>
 </div>
 <div class="rbd" id="rwBody"></div>
