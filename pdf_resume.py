@@ -17,6 +17,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    HRFlowable,
     Image,
     KeepTogether,
     Paragraph,
@@ -91,7 +92,7 @@ def _looks_like_section(text: str) -> bool:
     value = text.strip().rstrip("：:")
     sections = {
         "个人优势", "教育经历", "工作经历", "实习经历", "项目经历", "专业技能",
-        "技能", "校园经历", "获奖经历", "证书", "自我评价", "求职意向",
+        "技能", "校园经历", "获奖经历", "获奖证书", "证书", "自我评价", "求职意向",
     }
     return value in sections or (2 <= len(value) <= 12 and value.endswith("经历"))
 
@@ -118,24 +119,28 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
     styles = getSampleStyleSheet()
     body = ParagraphStyle(
         "ResumeBody", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=8.8, leading=12.2, textColor=colors.HexColor("#263244"),
-        spaceAfter=2.2,
+        fontSize=9.5, leading=13.8, textColor=colors.HexColor("#1f2937"),
+        spaceAfter=2.6,
     )
     bullet = ParagraphStyle(
-        "ResumeBullet", parent=body, leftIndent=10, firstLineIndent=-7,
-        bulletIndent=2, spaceAfter=1.8,
+        "ResumeBullet", parent=body, leftIndent=12, firstLineIndent=-8,
+        bulletIndent=2, spaceAfter=2.4,
     )
     heading = ParagraphStyle(
-        "ResumeHeading", parent=body, fontSize=11.5, leading=14,
-        textColor=colors.HexColor("#17375e"), spaceBefore=5.5, spaceAfter=3,
+        "ResumeHeading", parent=body, fontSize=12.5, leading=15,
+        textColor=colors.HexColor("#12233f"), spaceBefore=7, spaceAfter=1,
     )
     title_style = ParagraphStyle(
-        "ResumeTitle", parent=heading, fontSize=17, leading=20,
-        textColor=colors.HexColor("#111827"), spaceBefore=0, spaceAfter=2,
+        "ResumeTitle", parent=heading, fontSize=20, leading=23,
+        textColor=colors.HexColor("#0f172a"), spaceBefore=0, spaceAfter=3,
     )
     role_style = ParagraphStyle(
-        "ResumeRole", parent=body, fontSize=10.5, leading=14,
-        textColor=colors.HexColor("#2563eb"), spaceAfter=4,
+        "ResumeRole", parent=body, fontSize=11.5, leading=15,
+        textColor=colors.HexColor("#1e40af"), spaceAfter=5,
+    )
+    contact_style = ParagraphStyle(
+        "ResumeContact", parent=body, fontSize=9.3, leading=13,
+        textColor=colors.HexColor("#374151"), spaceAfter=1.2,
     )
     footer_style = ParagraphStyle(
         "ResumeFooter", parent=body, fontSize=7.2, textColor=colors.HexColor("#64748b"),
@@ -153,7 +158,7 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
     header_flow.append(Paragraph(_safe_markup(target_role), role_style))
     for _, _, value in header_items[1:]:
         if value.strip() != target_role.strip() and not _looks_like_section(value):
-            header_flow.append(Paragraph(_safe_markup(value), body))
+            header_flow.append(Paragraph(_safe_markup(value), contact_style))
 
     photo = Image(io.BytesIO(photo_bytes), width=26 * mm, height=34 * mm, kind="proportional")
     header_table = Table([[header_flow, photo]], colWidths=[doc.width - 32 * mm, 32 * mm])
@@ -163,8 +168,8 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.8, colors.HexColor("#93a4b8")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.1, colors.HexColor("#334155")),
     ]))
     story = [header_table, Spacer(1, 3 * mm)]
 
@@ -177,6 +182,13 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
         if level == "title" or level == "heading" or _looks_like_section(value):
             story.append(KeepTogether([
                 Paragraph(_safe_markup(value.rstrip("：:")), heading),
+                HRFlowable(
+                    width="100%",
+                    thickness=0.8,
+                    color=colors.HexColor("#c7d2e0"),
+                    spaceBefore=1,
+                    spaceAfter=5,
+                ),
             ]))
         elif level == "bullet" or re.match(r"^\d+[.、]\s*", value):
             story.append(Paragraph("• " + _safe_markup(value), bullet))

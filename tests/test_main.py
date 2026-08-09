@@ -97,6 +97,37 @@ def test_build_resume_pdf_keeps_photo_and_text():
     assert "张凡" in (reader.pages[0].extract_text() or "")
 
 
+def test_build_resume_pdf_with_sections_and_styles():
+    photo = extract_profile_photo(_pdf_with_photo())
+    content = (
+        "陈志远\nAI产品运营实习生\nchenzhiyuan@example.com | 138-0000-0000 | 杭州\n"
+        "https://github.com/chenzhiyuan\n"
+        "教育经历\n华中科技大学 计算机科学与技术本科\n"
+        "项目经历\n- 搭建 AI 求职助手：FastAPI 后端，调用 DeepSeek API\n- 完成需求分析与功能迭代\n"
+        "专业技能\n- **Python**、FastAPI\n"
+        "获奖证书\n暂无\n"
+    )
+    result = build_resume_pdf(content, photo, "AI产品运营实习生")
+    assert result.startswith(b"%PDF")
+    assert len(result) > 1000
+    reader = PdfReader(io.BytesIO(result))
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    assert "陈志远" in text
+    assert "AI产品运营实习生" in text
+    assert "教育经历" in text
+    assert "项目经历" in text
+    assert "专业技能" in text
+    assert "获奖证书" in text
+    assert "华中科技大学" in text
+
+
+def test_build_resume_pdf_without_photo_raises():
+    import pytest
+
+    with pytest.raises(PhotoNotFoundError):
+        build_resume_pdf("张凡\n项目经历", b"", "AI产品经理实习生")
+
+
 def test_export_pdf_endpoint_returns_real_pdf_with_photo():
     client = TestClient(main.app)
     response = client.post(
