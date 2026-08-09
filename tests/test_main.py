@@ -202,6 +202,27 @@ def test_build_resume_pdf_fallback_without_sections():
     assert "Python" in text
 
 
+def test_build_resume_pdf_with_multiple_long_urls():
+    photo = extract_profile_photo(_pdf_with_photo())
+    content = (
+        "陈志远\nAI产品运营实习生\nchenzhiyuan@example.com | 138-0000-0000 | 杭州\n"
+        "https://github.com/chenzhiyuan\n"
+        "教育经历\n华中科技大学 计算机科学与技术本科\n"
+        "项目经历\n"
+        "- 项目 A：完整实现链路 https://github.com/example/project-a/tree/main/backend/src 说明\n"
+        "- 项目 B：部署文档 https://github.com/example/project-b/blob/main/docs/deploy.md\n"
+    )
+    result = build_resume_pdf(content, photo, "AI产品运营实习生")
+    assert result.startswith(b"%PDF")
+    reader = PdfReader(io.BytesIO(result))
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    assert "陈志远" in text
+    assert "华中科技大学" in text
+    assert "github.com/chenzhiyuan" in text
+    assert "github.com/example/project-a" in text
+    assert "https://github.com" not in text
+
+
 def test_build_resume_pdf_without_photo_raises():
     import pytest
 

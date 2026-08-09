@@ -36,11 +36,13 @@ FONT_PATH = Path(__file__).resolve().parent / "assets" / "fonts" / "NotoSansSC.t
 
 SIDEBAR_WIDTH = 52 * mm
 ACCENT = colors.HexColor("#1d4ed8")
+LINK_COLOR = colors.HexColor("#1d4ed8")
 LIGHT_BG = colors.HexColor("#eef3f8")
 SIDEBAR_BG = colors.HexColor("#f1f5f9")
 DIVIDER = colors.HexColor("#cbd5e1")
 INK = colors.HexColor("#0f172a")
-BODY_INK = colors.HexColor("#1f2937")
+BODY_INK = colors.HexColor("#111827")
+LEFT_INK = colors.HexColor("#1f2937")
 CONTACT_INK = colors.HexColor("#374151")
 
 LEFT_SECTIONS = {
@@ -78,10 +80,37 @@ def extract_profile_photo(pdf_bytes: bytes) -> bytes:
     return max(candidates, key=lambda item: item[0])[1]
 
 
-def _safe_markup(text: str) -> str:
+def _shorten_url(url: str) -> str:
+    """Shorten a URL for display while keeping it recognizable (no fabrication)."""
+    cleaned = url.strip().rstrip(".,;:!?。，；：！？)")
+    match = re.match(r"^(?:https?://)?(?:www\.)?([^/]+)(/.*)?$", cleaned, re.IGNORECASE)
+    if not match:
+        return cleaned
+    domain = match.group(1)
+    path = (match.group(2) or "").rstrip("/")
+    segments = [seg for seg in path.split("/") if seg]
+    kept = segments[:2]
+    shown = domain + ("/" + "/".join(kept) if kept else "")
+    if len(segments) > 2:
+        shown += "/…"
+    if len(shown) > 34:
+        shown = shown[:34] + "…"
+    return shown
+
+
+def _safe_markup(text: str, shorten_links: bool = True) -> str:
     escaped = html.escape(text.strip())
-    url_pattern = re.compile(r"(https?://[^\s<]+)")
-    return url_pattern.sub(r'<link href="\1" color="#2563eb">\1</link>', escaped)
+    url_pattern = re.compile(r"https?://[^\s<]+")
+
+    def _replace(match):
+        raw = match.group(0)
+        url = raw.rstrip(".,;:!?。，；：！？)")
+        if not url:
+            return raw
+        label = _shorten_url(url) if shorten_links else url
+        return f'<link href="{url}" color="#1d4ed8">{label}</link>'
+
+    return url_pattern.sub(_replace, escaped)
 
 
 def _clean_line(line: str) -> tuple[str, str]:
@@ -185,11 +214,11 @@ def _make_styles() -> dict[str, ParagraphStyle]:
         ),
         "sidebar_body": ParagraphStyle(
             "SidebarBody", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=8.8, leading=12.6, textColor=BODY_INK, spaceAfter=2.4,
+            fontSize=8.8, leading=12.6, textColor=LEFT_INK, spaceAfter=2.4,
         ),
         "sidebar_bullet": ParagraphStyle(
             "SidebarBullet", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=8.8, leading=12.6, textColor=BODY_INK,
+            fontSize=8.8, leading=12.6, textColor=LEFT_INK,
             leftIndent=9, firstLineIndent=-6, bulletIndent=1, spaceAfter=2,
         ),
         "footer": ParagraphStyle(
@@ -238,16 +267,22 @@ def _build_header_table(
         ("RIGHTPADDING", (1, 0), (1, 0), 4 * mm),
         ("TOPPADDING", (0, 0), (-1, -1), 5 * mm),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5 * mm),
-        ("LINEBELOW", (0, 0), (-1, -1), 1.2, INK),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.8, colors.HexColor("#64748b")),
     ]))
     return header_table
 
 
-def _section_heading(text: str, style: ParagraphStyle) -> list:
-    """Dark heading plus an accent underline. No nested tables, so it can split."""
+def _section_heading(text: str, style: ParagraphStyle, sidebar: bool = False) -> list:
+    """Resume-style heading: short accent bar + dark title + light divider."""
+    if sidebar:
+        return [
+            Paragraph(_safe_markup(text), style),
+            HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=4),
+        ]
     return [
+        HRFlowable(width=14 * mm, thickness=2, color=ACCENT, spaceBefore=4, spaceAfter=1.5),
         Paragraph(_safe_markup(text), style),
-        HRFlowable(width="100%", thickness=1.0, color=ACCENT, spaceBefore=0.5, spaceAfter=4),
+        HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=4),
     ]
 
 
@@ -276,6 +311,15 @@ def _add_page_number(canvas, document) -> None:
     canvas.setFillColor(colors.HexColor("#94a3b8"))
     canvas.drawCentredString(A4[0] / 2, 7 * mm, f"第 {document.page} 页")
     canvas.restoreState()
+
+
+def _modern_page(canvas, document) -> None:
+    """Draw the full-height sidebar background, then the page number."""
+    canvas.saveState()
+    canvas.setFillColor(SIDEBAR_BG)
+    canvas.rect(12 * mm, 12 * mm, SIDEBAR_WIDTH, A4[1] - 11 * mm - 12 * mm, stroke=0, fill=1)
+    canvas.restoreState()
+    _add_page_number(canvas, document)
 
 
 def _build_modern_pdf(
@@ -309,7 +353,7 @@ def _build_modern_pdf(
     main_flow: list = []
     for section_name, items in sections:
         if section_name in LEFT_SECTIONS:
-            sidebar_flow.extend(_section_heading(section_name, styles["sidebar_heading"]))
+            sidebar_flow.extend(_section_heading(section_name, styles["sidebar_heading"], sidebar=True))
             sidebar_flow.extend(_render_items(items, styles, sidebar=True))
         else:
             main_flow.extend(_section_heading(section_name, styles["right_heading"]))
@@ -322,7 +366,7 @@ def _build_modern_pdf(
     ]
     has_contact_section = any(name in ("联系方式", "个人信息") for name, _ in sections)
     if not has_contact_section and contacts:
-        auto = _section_heading("联系方式", styles["sidebar_heading"])
+        auto = _section_heading("联系方式", styles["sidebar_heading"], sidebar=True)
         auto.extend(Paragraph(_safe_markup(c), styles["sidebar_body"]) for c in contacts[:4])
         sidebar_flow = auto + sidebar_flow
 
@@ -351,7 +395,7 @@ def _build_modern_pdf(
     ]))
 
     story = [header_table, Spacer(1, 3 * mm), two_col]
-    doc.build(story, onFirstPage=_add_page_number, onLaterPages=_add_page_number)
+    doc.build(story, onFirstPage=_modern_page, onLaterPages=_modern_page)
     return buffer.getvalue()
 
 
