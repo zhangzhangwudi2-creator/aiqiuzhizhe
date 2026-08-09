@@ -34,16 +34,17 @@ class PhotoNotFoundError(ValueError):
 FONT_NAME = "NotoSansSC"
 FONT_PATH = Path(__file__).resolve().parent / "assets" / "fonts" / "NotoSansSC.ttf"
 
-SIDEBAR_WIDTH = 52 * mm
+SIDEBAR_WIDTH = 50 * mm
 ACCENT = colors.HexColor("#1d4ed8")
-LINK_COLOR = colors.HexColor("#1d4ed8")
-LIGHT_BG = colors.HexColor("#eef3f8")
-SIDEBAR_BG = colors.HexColor("#f1f5f9")
+LINK_COLOR = colors.HexColor("#1e3a8a")
+LIGHT_BG = colors.HexColor("#e8eef6")
+SIDEBAR_BG = colors.HexColor("#edf2f7")
 DIVIDER = colors.HexColor("#cbd5e1")
 INK = colors.HexColor("#0f172a")
 BODY_INK = colors.HexColor("#111827")
 LEFT_INK = colors.HexColor("#1f2937")
 CONTACT_INK = colors.HexColor("#374151")
+ROLE_COLOR = colors.HexColor("#1e40af")
 
 LEFT_SECTIONS = {
     "联系方式", "个人信息", "求职意向", "专业技能", "技能特长",
@@ -108,7 +109,7 @@ def _safe_markup(text: str, shorten_links: bool = True) -> str:
         if not url:
             return raw
         label = _shorten_url(url) if shorten_links else url
-        return f'<link href="{url}" color="#1d4ed8">{label}</link>'
+        return f'<link href="{url}" color="#1e3a8a">{label}</link>'
 
     return url_pattern.sub(_replace, escaped)
 
@@ -181,45 +182,45 @@ def _make_styles() -> dict[str, ParagraphStyle]:
     return {
         "body": ParagraphStyle(
             "ResumeBody", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=9.5, leading=13.8, textColor=BODY_INK, spaceAfter=2.6,
+            fontSize=9.5, leading=13.5, textColor=BODY_INK, spaceAfter=2.2,
         ),
         "bullet": ParagraphStyle(
             "ResumeBullet", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=9.5, leading=13.8, textColor=BODY_INK,
-            leftIndent=12, firstLineIndent=-8, bulletIndent=2, spaceAfter=2.4,
+            fontSize=9.5, leading=13.2, textColor=BODY_INK,
+            leftIndent=12, firstLineIndent=-8, bulletIndent=2, spaceAfter=1.8,
         ),
         "subhead": ParagraphStyle(
             "ResumeSubhead", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=10.2, leading=13.5, textColor=INK, spaceBefore=2, spaceAfter=1.5,
+            fontSize=10.5, leading=13.8, textColor=INK, spaceBefore=2, spaceAfter=1.5,
         ),
         "right_heading": ParagraphStyle(
             "RightHeading", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=12, leading=15, textColor=INK, spaceBefore=3, spaceAfter=1,
+            fontSize=12.5, leading=15.5, textColor=INK, spaceBefore=3, spaceAfter=1,
         ),
         "name": ParagraphStyle(
             "ResumeName", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=20, leading=23, textColor=INK, spaceAfter=2,
+            fontSize=22, leading=25, textColor=INK, spaceAfter=2,
         ),
         "role": ParagraphStyle(
             "ResumeRole", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=11.5, leading=15, textColor=ACCENT, spaceAfter=4,
+            fontSize=12, leading=15.5, textColor=ROLE_COLOR, spaceAfter=4,
         ),
         "contact": ParagraphStyle(
             "ResumeContact", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=9.3, leading=13, textColor=CONTACT_INK, spaceAfter=1.2,
+            fontSize=9.3, leading=12.5, textColor=CONTACT_INK, spaceAfter=1,
         ),
         "sidebar_heading": ParagraphStyle(
             "SidebarHeading", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=10.5, leading=13.5, textColor=INK, spaceBefore=4, spaceAfter=1,
+            fontSize=10.8, leading=13.8, textColor=INK, spaceBefore=3, spaceAfter=1,
         ),
         "sidebar_body": ParagraphStyle(
             "SidebarBody", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=8.8, leading=12.6, textColor=LEFT_INK, spaceAfter=2.4,
+            fontSize=8.8, leading=11.8, textColor=LEFT_INK, spaceAfter=1.8,
         ),
         "sidebar_bullet": ParagraphStyle(
             "SidebarBullet", parent=styles["BodyText"], fontName=FONT_NAME,
-            fontSize=8.8, leading=12.6, textColor=LEFT_INK,
-            leftIndent=9, firstLineIndent=-6, bulletIndent=1, spaceAfter=2,
+            fontSize=8.8, leading=11.8, textColor=LEFT_INK,
+            leftIndent=9, firstLineIndent=-6, bulletIndent=1, spaceAfter=1.6,
         ),
         "footer": ParagraphStyle(
             "ResumeFooter", parent=styles["BodyText"], fontName=FONT_NAME,
@@ -265,8 +266,8 @@ def _build_header_table(
         ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("LEFTPADDING", (0, 0), (0, 0), 6 * mm),
         ("RIGHTPADDING", (1, 0), (1, 0), 4 * mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 5 * mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5 * mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 4 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4 * mm),
         ("LINEBELOW", (0, 0), (-1, -1), 0.8, colors.HexColor("#64748b")),
     ]))
     return header_table
@@ -277,12 +278,12 @@ def _section_heading(text: str, style: ParagraphStyle, sidebar: bool = False) ->
     if sidebar:
         return [
             Paragraph(_safe_markup(text), style),
-            HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=4),
+            HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=3),
         ]
     return [
-        HRFlowable(width=14 * mm, thickness=2, color=ACCENT, spaceBefore=4, spaceAfter=1.5),
+        HRFlowable(width=16 * mm, thickness=2.2, color=ACCENT, spaceBefore=3, spaceAfter=1.2),
         Paragraph(_safe_markup(text), style),
-        HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=4),
+        HRFlowable(width="100%", thickness=0.5, color=DIVIDER, spaceBefore=1, spaceAfter=3),
     ]
 
 
@@ -364,11 +365,18 @@ def _build_modern_pdf(
         for _level, value in header[1:]
         if value.strip() != target_role.strip() and not _looks_like_section(value)
     ]
+    auto_blocks: list = []
     has_contact_section = any(name in ("联系方式", "个人信息") for name, _ in sections)
     if not has_contact_section and contacts:
         auto = _section_heading("联系方式", styles["sidebar_heading"], sidebar=True)
         auto.extend(Paragraph(_safe_markup(c), styles["sidebar_body"]) for c in contacts[:4])
-        sidebar_flow = auto + sidebar_flow
+        auto_blocks.extend(auto)
+    has_intent_section = any(name in ("求职意向", "个人信息") for name, _ in sections)
+    if not has_intent_section and target_role and target_role != "目标岗位":
+        intent = _section_heading("求职意向", styles["sidebar_heading"], sidebar=True)
+        intent.append(Paragraph(_safe_markup(target_role), styles["sidebar_body"]))
+        auto_blocks.extend(intent)
+    sidebar_flow = auto_blocks + sidebar_flow
 
     if not main_flow:
         default_items = [(level, value) for level, value in header[4:]]
