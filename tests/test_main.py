@@ -121,6 +121,45 @@ def test_build_resume_pdf_with_sections_and_styles():
     assert "华中科技大学" in text
 
 
+def test_build_resume_pdf_modern_two_column_layout():
+    photo = extract_profile_photo(_pdf_with_photo())
+    content = (
+        "陈志远\nAI产品运营实习生\nchenzhiyuan@example.com | 138-0000-0000 | 杭州\n"
+        "https://github.com/chenzhiyuan\n"
+        "专业技能\n- Python、FastAPI\n- Prompt 工程\n"
+        "教育经历\n华中科技大学 计算机科学与技术本科\n"
+        "项目经历\n- 搭建 AI 求职助手：FastAPI 后端，调用 DeepSeek API\n"
+        "实习经历\n- 参与产品需求分析与功能迭代\n"
+        "获奖证书\n暂无\n"
+    )
+    result = build_resume_pdf(content, photo, "AI产品运营实习生")
+    assert result.startswith(b"%PDF")
+    assert len(result) > 1500
+    reader = PdfReader(io.BytesIO(result))
+    assert len(reader.pages) <= 2
+    assert sum(len(page.images) for page in reader.pages) >= 1
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    for token in (
+        "陈志远", "AI产品运营实习生", "专业技能", "教育经历",
+        "项目经历", "实习经历", "获奖证书", "华中科技大学", "FastAPI",
+    ):
+        assert token in text
+
+
+def test_build_resume_pdf_fallback_without_sections():
+    photo = extract_profile_photo(_pdf_with_photo())
+    result = build_resume_pdf(
+        "张三\n电话 138-0000-0000\n擅长 Python 与 FastAPI\n做过三个项目",
+        photo,
+        "AI产品运营实习生",
+    )
+    assert result.startswith(b"%PDF")
+    reader = PdfReader(io.BytesIO(result))
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    assert "张三" in text
+    assert "Python" in text
+
+
 def test_build_resume_pdf_without_photo_raises():
     import pytest
 
