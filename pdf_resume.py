@@ -1,4 +1,4 @@
-"""Generate a real resume PDF with a modern two-column layout."""
+"""Generate a real resume PDF: modern two-column layout with a stable single-column fallback."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    HRFlowable,
     Image,
     Paragraph,
     SimpleDocTemplate,
@@ -111,7 +112,9 @@ def _looks_like_section(text: str) -> bool:
     return value in sections or (2 <= len(value) <= 12 and value.endswith("经历"))
 
 
-def _parse_resume_sections(rewritten_resume: str) -> tuple[list[tuple[str, str]], list[tuple[str, list[tuple[str, str]]]]]:
+def _parse_resume_sections(
+    rewritten_resume: str,
+) -> tuple[list[tuple[str, str]], list[tuple[str, list[tuple[str, str]]]]]:
     """Split markdown resume into (header_lines, sections)."""
     header: list[tuple[str, str]] = []
     sections: list[tuple[str, list[tuple[str, str]]]] = []
@@ -137,14 +140,151 @@ def _parse_resume_sections(rewritten_resume: str) -> tuple[list[tuple[str, str]]
     return header, sections
 
 
-def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str) -> bytes:
-    """Build an A4 two-column resume PDF with a header block and sidebar."""
-    if not rewritten_resume.strip():
-        raise ValueError("优化简历内容为空")
-    if not photo_bytes:
-        raise PhotoNotFoundError("照片为空")
+def _content_is_long(rewritten_resume: str) -> bool:
+    """Heuristic: very long content goes straight to the stable single-column layout."""
+    lines = rewritten_resume.splitlines()
+    bullets = sum(1 for line in lines if line.strip().startswith(("- ", "* ", "• ")))
+    return len(rewritten_resume) > 1400 or bullets > 25 or len(lines) > 90
 
-    _register_font()
+
+def _make_styles() -> dict[str, ParagraphStyle]:
+    styles = getSampleStyleSheet()
+    return {
+        "body": ParagraphStyle(
+            "ResumeBody", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=9.5, leading=13.8, textColor=BODY_INK, spaceAfter=2.6,
+        ),
+        "bullet": ParagraphStyle(
+            "ResumeBullet", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=9.5, leading=13.8, textColor=BODY_INK,
+            leftIndent=12, firstLineIndent=-8, bulletIndent=2, spaceAfter=2.4,
+        ),
+        "subhead": ParagraphStyle(
+            "ResumeSubhead", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=10.2, leading=13.5, textColor=INK, spaceBefore=2, spaceAfter=1.5,
+        ),
+        "right_heading": ParagraphStyle(
+            "RightHeading", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=12, leading=15, textColor=INK, spaceBefore=3, spaceAfter=1,
+        ),
+        "name": ParagraphStyle(
+            "ResumeName", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=20, leading=23, textColor=INK, spaceAfter=2,
+        ),
+        "role": ParagraphStyle(
+            "ResumeRole", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=11.5, leading=15, textColor=ACCENT, spaceAfter=4,
+        ),
+        "contact": ParagraphStyle(
+            "ResumeContact", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=9.3, leading=13, textColor=CONTACT_INK, spaceAfter=1.2,
+        ),
+        "sidebar_heading": ParagraphStyle(
+            "SidebarHeading", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=10.5, leading=13.5, textColor=INK, spaceBefore=4, spaceAfter=1,
+        ),
+        "sidebar_body": ParagraphStyle(
+            "SidebarBody", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=8.8, leading=12.6, textColor=BODY_INK, spaceAfter=2.4,
+        ),
+        "sidebar_bullet": ParagraphStyle(
+            "SidebarBullet", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=8.8, leading=12.6, textColor=BODY_INK,
+            leftIndent=9, firstLineIndent=-6, bulletIndent=1, spaceAfter=2,
+        ),
+        "footer": ParagraphStyle(
+            "ResumeFooter", parent=styles["BodyText"], fontName=FONT_NAME,
+            fontSize=7.2, textColor=colors.HexColor("#94a3b8"), alignment=TA_CENTER,
+        ),
+    }
+
+
+def _build_header_table(
+    header: list[tuple[str, str]],
+    target_role: str,
+    photo_bytes: bytes,
+    total_width: float,
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    """Top info block: name + role + contacts on the left, photo on the right."""
+    name = header[0][1] if header else "简历"
+    left = [
+        Paragraph(_safe_markup(name), styles["name"]),
+        Paragraph(_safe_markup(target_role), styles["role"]),
+    ]
+    contacts = [
+        value
+        for _level, value in header[1:]
+        if value.strip() != target_role.strip() and not _looks_like_section(value)
+    ]
+    for contact in contacts[:4]:
+        left.append(Paragraph(_safe_markup(contact), styles["contact"]))
+
+    photo_table = Table(
+        [[Image(io.BytesIO(photo_bytes), width=24 * mm, height=30 * mm, kind="proportional")]],
+        colWidths=[24 * mm],
+        rowHeights=[30 * mm],
+    )
+    photo_table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, DIVIDER),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    header_table = Table([[left, photo_table]], colWidths=[total_width - 28 * mm, 28 * mm])
+    header_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BG),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (0, 0), 6 * mm),
+        ("RIGHTPADDING", (1, 0), (1, 0), 4 * mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 5 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5 * mm),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.2, INK),
+    ]))
+    return header_table
+
+
+def _section_heading(text: str, style: ParagraphStyle) -> list:
+    """Dark heading plus an accent underline. No nested tables, so it can split."""
+    return [
+        Paragraph(_safe_markup(text), style),
+        HRFlowable(width="100%", thickness=1.0, color=ACCENT, spaceBefore=0.5, spaceAfter=4),
+    ]
+
+
+def _render_items(
+    items: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+    sidebar: bool = False,
+) -> list:
+    body_style = styles["sidebar_body"] if sidebar else styles["body"]
+    bullet_style = styles["sidebar_bullet"] if sidebar else styles["bullet"]
+    subhead_style = styles["sidebar_heading"] if sidebar else styles["subhead"]
+    flow = []
+    for level, value in items:
+        if level == "bullet" or re.match(r"^\d+[.、]\s*", value):
+            flow.append(Paragraph("• " + _safe_markup(value), bullet_style))
+        elif level == "heading":
+            flow.append(Paragraph(_safe_markup(value), subhead_style))
+        else:
+            flow.append(Paragraph(_safe_markup(value), body_style))
+    return flow
+
+
+def _add_page_number(canvas, document) -> None:
+    canvas.saveState()
+    canvas.setFont(FONT_NAME, 7)
+    canvas.setFillColor(colors.HexColor("#94a3b8"))
+    canvas.drawCentredString(A4[0] / 2, 7 * mm, f"第 {document.page} 页")
+    canvas.restoreState()
+
+
+def _build_modern_pdf(
+    rewritten_resume: str,
+    photo_bytes: bytes,
+    target_role: str,
+    styles: dict[str, ParagraphStyle],
+) -> bytes:
+    """Two-column modern layout. Cells only contain Paragraph/HR/Spacer so rows can split."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -156,155 +296,41 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
         title=f"{target_role}_针对性简历",
         author="AI 求职助手",
     )
-
-    styles = getSampleStyleSheet()
-    body = ParagraphStyle(
-        "ResumeBody", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=9.5, leading=13.8, textColor=BODY_INK, spaceAfter=2.6,
-    )
-    bullet = ParagraphStyle(
-        "ResumeBullet", parent=body, leftIndent=12, firstLineIndent=-8,
-        bulletIndent=2, spaceAfter=2.4,
-    )
-    subhead = ParagraphStyle(
-        "ResumeSubhead", parent=body, fontSize=10.2, leading=13.5,
-        textColor=INK, spaceBefore=2, spaceAfter=1.5,
-    )
-    right_heading = ParagraphStyle(
-        "RightHeading", parent=body, fontSize=12, leading=15,
-        textColor=INK, spaceBefore=0, spaceAfter=0,
-    )
-    name_style = ParagraphStyle(
-        "ResumeName", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=20, leading=23, textColor=INK, spaceAfter=2,
-    )
-    role_style = ParagraphStyle(
-        "ResumeRole", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=11.5, leading=15, textColor=ACCENT, spaceAfter=4,
-    )
-    contact_style = ParagraphStyle(
-        "ResumeContact", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=9.3, leading=13, textColor=CONTACT_INK, spaceAfter=1.2,
-    )
-    sidebar_heading = ParagraphStyle(
-        "SidebarHeading", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=10.5, leading=13.5, textColor=INK, spaceAfter=0,
-    )
-    sidebar_body = ParagraphStyle(
-        "SidebarBody", parent=styles["BodyText"], fontName=FONT_NAME,
-        fontSize=8.8, leading=12.6, textColor=BODY_INK, spaceAfter=2.4,
-    )
-    sidebar_bullet = ParagraphStyle(
-        "SidebarBullet", parent=sidebar_body, leftIndent=9, firstLineIndent=-6,
-        bulletIndent=1, spaceAfter=2,
-    )
-    footer_style = ParagraphStyle(
-        "ResumeFooter", parent=body, fontSize=7.2,
-        textColor=colors.HexColor("#94a3b8"), alignment=TA_CENTER,
-    )
-
     header, sections = _parse_resume_sections(rewritten_resume)
+    header_table = _build_header_table(header, target_role, photo_bytes, doc.width, styles)
 
-    # ---- 顶部信息区 ----
-    name = header[0][1] if header else "简历"
-    header_left = [
-        Paragraph(_safe_markup(name), name_style),
-        Paragraph(_safe_markup(target_role), role_style),
-    ]
-    contacts = [
-        value
-        for _level, value in header[1:]
-        if value.strip() != target_role.strip() and not _looks_like_section(value)
-    ]
-    for contact in contacts[:4]:
-        header_left.append(Paragraph(_safe_markup(contact), contact_style))
-
-    photo_table = Table(
-        [[Image(io.BytesIO(photo_bytes), width=24 * mm, height=30 * mm, kind="proportional")]],
-        colWidths=[24 * mm],
-        rowHeights=[30 * mm],
-    )
-    photo_table.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.8, DIVIDER),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    header_table = Table([[header_left, photo_table]], colWidths=[doc.width - 28 * mm, 28 * mm])
-    header_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BG),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (0, 0), 6 * mm),
-        ("RIGHTPADDING", (1, 0), (1, 0), 4 * mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 5 * mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5 * mm),
-        ("LINEBELOW", (0, 0), (-1, -1), 1.2, INK),
-    ]))
-
-    # ---- 左侧信息栏 / 右侧主内容 ----
     left_pad_lr = 5 * mm
     right_pad_l = 6 * mm
     right_pad_r = 4 * mm
     usable_left = SIDEBAR_WIDTH - 2 * left_pad_lr
     usable_right = (doc.width - SIDEBAR_WIDTH) - right_pad_l - right_pad_r
 
-    def section_header(text: str, width: float, sidebar: bool = False) -> Table:
-        bar = Paragraph("", ParagraphStyle("accentbar", fontName=FONT_NAME, fontSize=1))
-        head_style = sidebar_heading if sidebar else right_heading
-        table = Table(
-            [[bar, Paragraph(_safe_markup(text), head_style)]],
-            colWidths=[3 * mm, width - 3 * mm],
-        )
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, 0), ACCENT),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LINEBELOW", (0, 0), (-1, -1), 0.7, DIVIDER),
-            ("LEFTPADDING", (0, 0), (0, 0), 0),
-            ("RIGHTPADDING", (0, 0), (0, 0), 0),
-            ("TOPPADDING", (0, 0), (0, 0), 0),
-            ("BOTTOMPADDING", (0, 0), (0, 0), 0),
-            ("LEFTPADDING", (1, 0), (1, 0), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
-        return table
-
-    def render_items(
-        items: list[tuple[str, str]],
-        body_style: ParagraphStyle,
-        bullet_style: ParagraphStyle,
-        subhead_style: ParagraphStyle,
-    ) -> list:
-        flow = []
-        for level, value in items:
-            if level == "bullet" or re.match(r"^\d+[.、]\s*", value):
-                flow.append(Paragraph("• " + _safe_markup(value), bullet_style))
-            elif level == "heading":
-                flow.append(Paragraph(_safe_markup(value), subhead_style))
-            else:
-                flow.append(Paragraph(_safe_markup(value), body_style))
-        return flow
-
     sidebar_flow: list = []
     main_flow: list = []
     for section_name, items in sections:
         if section_name in LEFT_SECTIONS:
-            sidebar_flow.append(section_header(section_name, usable_left, sidebar=True))
-            sidebar_flow.extend(render_items(items, sidebar_body, sidebar_bullet, sidebar_heading))
+            sidebar_flow.extend(_section_heading(section_name, styles["sidebar_heading"]))
+            sidebar_flow.extend(_render_items(items, styles, sidebar=True))
         else:
-            main_flow.append(section_header(section_name, usable_right))
-            main_flow.extend(render_items(items, body, bullet, subhead))
+            main_flow.extend(_section_heading(section_name, styles["right_heading"]))
+            main_flow.extend(_render_items(items, styles, sidebar=False))
 
+    contacts = [
+        value
+        for _level, value in header[1:]
+        if value.strip() != target_role.strip() and not _looks_like_section(value)
+    ]
     has_contact_section = any(name in ("联系方式", "个人信息") for name, _ in sections)
     if not has_contact_section and contacts:
-        auto_contacts = [section_header("联系方式", usable_left, sidebar=True)]
-        auto_contacts.extend(Paragraph(_safe_markup(c), sidebar_body) for c in contacts[:4])
-        sidebar_flow = auto_contacts + sidebar_flow
+        auto = _section_heading("联系方式", styles["sidebar_heading"])
+        auto.extend(Paragraph(_safe_markup(c), styles["sidebar_body"]) for c in contacts[:4])
+        sidebar_flow = auto + sidebar_flow
 
     if not main_flow:
         default_items = [(level, value) for level, value in header[4:]]
         if default_items:
-            main_flow.append(section_header("个人简历", usable_right))
-            main_flow.extend(render_items(default_items, body, bullet, subhead))
+            main_flow.extend(_section_heading("个人简历", styles["right_heading"]))
+            main_flow.extend(_render_items(default_items, styles, sidebar=False))
 
     two_col = Table(
         [[sidebar_flow, main_flow]],
@@ -325,13 +351,62 @@ def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str
     ]))
 
     story = [header_table, Spacer(1, 3 * mm), two_col]
-
-    def add_page_number(canvas, document):
-        canvas.saveState()
-        canvas.setFont(FONT_NAME, 7)
-        canvas.setFillColor(colors.HexColor("#94a3b8"))
-        canvas.drawCentredString(A4[0] / 2, 7 * mm, f"第 {document.page} 页")
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    doc.build(story, onFirstPage=_add_page_number, onLaterPages=_add_page_number)
     return buffer.getvalue()
+
+
+def _build_single_column_pdf(
+    rewritten_resume: str,
+    photo_bytes: bytes,
+    target_role: str,
+    styles: dict[str, ParagraphStyle],
+) -> bytes:
+    """Stable single-column layout: header + dark sections with accent underlines."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=12 * mm,
+        bottomMargin=12 * mm,
+        title=f"{target_role}_针对性简历",
+        author="AI 求职助手",
+    )
+    header, sections = _parse_resume_sections(rewritten_resume)
+    header_table = _build_header_table(header, target_role, photo_bytes, doc.width, styles)
+    story = [header_table, Spacer(1, 4 * mm)]
+
+    if sections:
+        for section_name, items in sections:
+            story.extend(_section_heading(section_name, styles["right_heading"]))
+            story.extend(_render_items(items, styles, sidebar=False))
+    else:
+        story.extend(_section_heading("个人简历", styles["right_heading"]))
+        story.extend(
+            Paragraph(_safe_markup(value), styles["body"])
+            for _level, value in header
+        )
+
+    doc.build(story, onFirstPage=_add_page_number, onLaterPages=_add_page_number)
+    return buffer.getvalue()
+
+
+def build_resume_pdf(rewritten_resume: str, photo_bytes: bytes, target_role: str) -> bytes:
+    """Build a resume PDF: modern two-column when safe, stable single-column otherwise."""
+    if not rewritten_resume.strip():
+        raise ValueError("优化简历内容为空")
+    if not photo_bytes:
+        raise PhotoNotFoundError("照片为空")
+
+    _register_font()
+    styles = _make_styles()
+
+    if _content_is_long(rewritten_resume):
+        return _build_single_column_pdf(rewritten_resume, photo_bytes, target_role, styles)
+
+    try:
+        return _build_modern_pdf(rewritten_resume, photo_bytes, target_role, styles)
+    except Exception:
+        # 现代双栏布局遇到无法排版的内容时，自动降级为稳定单栏模板。
+        return _build_single_column_pdf(rewritten_resume, photo_bytes, target_role, styles)

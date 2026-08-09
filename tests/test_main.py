@@ -146,6 +146,48 @@ def test_build_resume_pdf_modern_two_column_layout():
         assert token in text
 
 
+def test_build_resume_pdf_long_resume_no_layout_error():
+    photo = extract_profile_photo(_pdf_with_photo())
+    bullets = "\n".join(
+        "- 项目 %d：完成功能开发、接口联调与单元测试，使用 FastAPI 与 DeepSeek API，文档 https://github.com/example/project%d/blob/main/README.md"
+        % (i, i)
+        for i in range(1, 31)
+    )
+    content = (
+        "陈志远\nAI产品运营实习生\nchenzhiyuan@example.com | 138-0000-0000 | 杭州\n"
+        "专业技能\n- Python、FastAPI\n- Prompt 工程、pytest、GitHub Actions、Railway 部署\n"
+        "教育经历\n华中科技大学 计算机科学与技术本科\n"
+        "项目经历\n" + bullets + "\n"
+        "实习经历\n- 参与内容运营数据整理与用户反馈分析\n"
+        "获奖证书\n校级优秀项目奖\n"
+    )
+    result = build_resume_pdf(content, photo, "AI产品运营实习生")
+    assert result.startswith(b"%PDF")
+    assert len(result) > 1500
+    reader = PdfReader(io.BytesIO(result))
+    assert len(reader.pages) >= 1
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    for token in ("陈志远", "AI产品运营实习生", "华中科技大学", "项目 30"):
+        assert token in text
+
+
+def test_build_resume_pdf_falls_back_when_modern_fails(monkeypatch):
+    from reportlab.platypus.doctemplate import LayoutError
+
+    def boom(*_args, **_kwargs):
+        raise LayoutError("forced modern layout failure")
+
+    monkeypatch.setattr("pdf_resume._build_modern_pdf", boom)
+    photo = extract_profile_photo(_pdf_with_photo())
+    result = build_resume_pdf(
+        "张凡\nAI产品经理实习生\n138-0000-0000\n教育经历\n某大学\n项目经历\n- 完成需求分析",
+        photo,
+        "AI产品经理实习生",
+    )
+    assert result.startswith(b"%PDF")
+    assert len(result) > 1000
+
+
 def test_build_resume_pdf_fallback_without_sections():
     photo = extract_profile_photo(_pdf_with_photo())
     result = build_resume_pdf(
