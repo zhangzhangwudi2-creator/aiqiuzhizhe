@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -17,12 +18,15 @@ from openai import AsyncOpenAI
 from pypdf import PdfReader
 
 from prompts import REWRITE_PROMPT, SYSTEM_PROMPT, build_prompt, build_rewrite_prompt
+from prompts import REWRITE_RETRY_PROMPT, build_rewrite_retry_prompt
 from quota import SlidingWindowRateLimiter, TTLCache, build_cache_key
 from schemas import AnalysisResult
 from pdf_resume import PhotoNotFoundError, build_resume_pdf, extract_profile_photo
 from fact_guard import RewriteFactError, validate_rewrite_facts
 
 load_dotenv()
+
+logger = logging.getLogger("aiqiuzhizhe")
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -169,7 +173,7 @@ def _infer_target_role(jd_text: str) -> str:
     for keywords, role in rules:
         if all(keyword.lower() in jd.lower() for keyword in keywords):
             return role
-    return "AI应用运营实习生"
+    return "目标岗位"
 
 
 def _resolve_target_role(target_role: str, jd_text: str) -> str:
@@ -294,10 +298,21 @@ async def rewrite_resume(
     try:
         validate_rewrite_facts(resume_text, content)
     except RewriteFactError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="AI 改写结果未通过事实一致性校验，请重试或补充更明确的原始简历信息",
-        ) from exc
+        logger.warning("rewrite fact guard failed, retrying once: %s", exc)
+        content = await _chat_completion(
+            system_prompt=REWRITE_RETRY_PROMPT,
+            user_prompt=build_rewrite_retry_prompt(resume_text, jd, role, str(exc)),
+            temperature=0.3,
+            max_tokens=8192,
+        )
+        try:
+            validate_rewrite_facts(resume_text, content)
+        except RewriteFactError as exc2:
+            logger.warning("rewrite fact guard failed after retry: %s", exc2)
+            raise HTTPException(
+                status_code=502,
+                detail="AI 改写结果未通过事实一致性校验，请重试或补充更明确的原始简历信息",
+            ) from exc2
     result = {"target_role": role, "rewritten_resume": content}
     response_cache.set(cache_key, result)
     return result
