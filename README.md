@@ -1,153 +1,33 @@
-# AI 求职助手
+# AI 求职助手 (`aiqiuzhizhe`)
 
-面向实习与校招场景的简历–岗位匹配工具。用户上传 PDF 简历并输入岗位描述（JD）后，系统调用 DeepSeek 生成结构化匹配分析，也可以在不改动事实的前提下生成针对岗位的简历改写稿。
+基于 **FastAPI + ReportLab + Tesseract.js** 的简历诊断、定向改写与保真 PDF 导出工具。  
+在线作品集演示与项目说明：[cv.zfzs.lol](https://cv.zfzs.lol)
 
-[![Tests](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions/workflows/tests.yml/badge.svg)](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions/workflows/tests.yml)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Railway-7B3FE4)](https://aiqiuzhizhe-production.up.railway.app/)
+![AI 求职助手界面](https://cv.zfzs.lol/media/job-helper-ui.jpg)
 
-**[在线体验](https://aiqiuzhizhe-production.up.railway.app/)** · **[查看自动测试](https://github.com/zhangzhangwudi2-creator/aiqiuzhizhe/actions)**
+## 解决的实际问题
 
-学习与迭代安排见 [`docs/30-day-internship-plan.md`](docs/30-day-internship-plan.md)。
+1. **防止大模型改写简历时乱删或编造信息（`fact_guard.py`）**
+   - 使用 `<TARGET_ROLE>`、`<UNTRUSTED_RESUME>`、`<UNTRUSTED_JOB_DESCRIPTION>` XML 标签隔离不可信输入，降低提示词注入风险。
+   - 改写完成后用确定性规则校验原简历的手机号、邮箱、URL 不丢失且无常见捏造实体；不通过时附带具体原因重试 1 次，仍失败直接返回 `HTTP 502` 且绝不写入缓存。
+2. **防绕过限流与缓存省额度（`quota.py`）**
+   - 请求参数做规范化 SHA-256 哈希，命中 6 小时 `TTLCache` 直接返回结果。
+   - 修复了取 `X-Forwarded-For` 首跳会被客户端伪造请求头绕过的问题：在信任代理模式下取最右可信跳实施滑动窗口限流（5 次/小时）。
+3. **浏览器端 OCR 与中文 PDF 稳定导出（`pdf_resume.py`）**
+   - 前端集成 `Tesseract.js` 识别招聘网站 JD 截图，不消耗服务端算力，同时保留纯文本粘贴兜底。
+   - 后端使用 ReportLab 嵌入 `NotoSansSC` 字体排版；提取不到原简历证件照时显式返回 `HTTP 422` 拒绝静默丢照，双栏 `LayoutError` 时自动降级单栏稳定模板。
 
-![AI 求职助手首页](docs/demo.png)
+## 自动化测试
 
-## 项目亮点
-
-- **真实业务闭环**：PDF简历与JD输入 → DeepSeek结构化分析 → 针对岗位生成改写稿。
-- **成本保护**：按IP限流，并缓存相同输入6小时，减少重复API费用。
-- **可靠输出**：使用Pydantic校验模型返回的分数、字段和枚举值。
-- **隐私边界清楚**：截图OCR留在浏览器端；服务端不持久化PDF，并明确披露文本会发送至DeepSeek。
-- **可重复验证**：14项Pytest测试（含接口与缓存链路）、3条带人工期望标签的离线质量评测和GitHub Actions持续集成。
-
-## 处理流程
-
-```text
-PDF简历 ──> PyPDF提取文字 ──┐
-                            ├──> 输入校验 ──> 限流/缓存 ──> DeepSeek
-JD文本/截图 ──> 浏览器OCR ──┘                            │
-                                                         v
-                             Pydantic校验 <── JSON结构化分析
-```
-
-## 在线功能
-
-- PDF 简历解析与内容长度控制
-- JD 文本输入，或在浏览器端使用 Tesseract.js 识别多张截图
-- 匹配度、优势、技能缺口、简历建议和面试问题的结构化分析
-- 针对目标岗位生成简历改写稿
-- 改写时显式指定目标岗位，强制替换原求职方向并以岗位命名下载文件
-- 下载真正的 PDF 简历：自动提取原 PDF 中的证件照并固定放回页首；未检测到照片时拒绝导出，避免静默生成无照片版本。导出优先使用现代双栏简历模板（顶部信息区、贯穿页面的浅色信息栏、简历风格 section 标题、接近黑色的深色正文），长链接自动缩短展示，内容较长或布局异常时自动降级为稳定单栏模板；仍是轻量模板，不是商业模板库
-- 改写结果经过轻量事实一致性校验：姓名、联系方式、学校、城市等高风险信息不允许被模型擅自替换或丢失；校验失败会自动重试一次，仍失败才返回安全提示
-- target_role 未指定时从 JD 轻量识别岗位名称；无法可靠识别时使用中性兜底，不会默认成某个具体岗位
-- 前端提供更明确的用户提示：上传/解析失败、限流、AI 服务异常、事实校验失败等场景都有用户可理解的中文说明
-- 支持直接粘贴简历文本：上传 PDF 与粘贴文本二选一，PDF 解析失败时可改用文本继续分析；后端 analyze/rewrite 兼容旧用法并支持 resume_text 参数
-- 分析结果支持复制或下载 Markdown 报告；优化简历可下载 Word 兼容文档（.doc，浏览器端生成的 HTML 文档，Word 可打开）
-- 无需注册；服务端不持久化简历文件
-- 同一输入结果缓存 6 小时，重复查看不再次消耗模型额度
-- 默认每个 IP 每小时最多 5 次未命中缓存的 AI 调用
-
-## 数据与隐私
-
-- JD 截图的 OCR 在浏览器内执行，截图不会上传到服务端。
-- PDF 会上传到本服务以提取文字，但不会被持久化保存。
-- 提取出的简历文字和 JD 会发送给 DeepSeek API 完成分析或改写。
-- 请勿上传身份证号、家庭住址等完成岗位分析不需要的敏感信息。
-
-## 技术栈
-
-- 后端：Python、FastAPI、AsyncOpenAI
-- 模型：DeepSeek `deepseek-chat`
-- PDF：PyPDF（文字/照片提取）、ReportLab（PDF 排版）、Pillow（图片处理），内嵌 Noto Sans SC 中文字体
-- OCR：Tesseract.js（浏览器端）
-- 前端：原生 HTML、CSS、JavaScript
-- 部署：Railway / Nixpacks
-- 测试：Pytest
-
-## 当前架构
-
-```text
-.
-├── main.py                # 当前部署入口与 API
-├── prompts.py             # 分析、改写 Prompt
-├── static/
-│   └── index.html         # 当前线上前端
-├── tests/
-│   └── test_main.py       # 核心输入校验测试
-├── evaluation/            # 不调用 API 的结构评测样例
-├── scripts/
-│   └── evaluate_outputs.py
-├── requirements.txt
-├── requirements-dev.txt
-├── .env.example
-└── nixpacks.toml
-```
-
-仓库中的 `backend/` 和 `frontend/` 是早期未完成的架构实验，不属于当前部署版本，其中包含模拟存储和模拟响应。为保留演进记录暂未删除，后续会在确认迁移价值后归档或移除。
-
-## 本地运行
-
-需要 Python 3.10 或更高版本。
+项目内置 **63 项 `pytest`** 回归测试（覆盖限流边界、`X-Forwarded-For` 伪造反例、`fact_guard` 拦截重试、文本输入校验与 PDF 导出契约），并配置了 GitHub Actions CI：
 
 ```bash
-python -m venv .venv
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-在 `.env` 中填写：
-
-```dotenv
-DEEPSEEK_API_KEY=your_deepseek_api_key
-```
-
-启动：
-
-```powershell
-python main.py
-```
-
-访问 `http://localhost:8000`。
-
-## API
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| `GET` | `/` | 前端页面 |
-| `POST` | `/analyze` | 简历与 JD 匹配分析 |
-| `POST` | `/rewrite-resume` | 针对 JD 改写简历 |
-| `POST` | `/export-resume-pdf` | 保留原照片并导出真正的 PDF 简历 |
-| `GET` | `/health` | 服务和 AI 配置状态 |
-
-上传限制：PDF 最大 10MB；提取后的简历最多使用 30,000 字符；JD 最多 15,000 字符。
-
-## 测试
-
-```powershell
-pip install -r requirements-dev.txt
 pytest -q
+# 63 passed in ~3s
 ```
 
-测试覆盖空 JD、超长 JD、错误文件类型、损坏 PDF、无文字 PDF，以及使用模拟模型响应的 `/analyze` 接口与缓存复用链路。
+## 当前边界与说明
 
-不消耗模型额度的离线输出质量评测：
-
-```powershell
-python scripts/evaluate_outputs.py
-```
-
-评测集为每类岗位保存人工编写的期望标签，包括合理分数区间、必须覆盖的关键点和禁止编造的成果。脚本同时检查 Pydantic 输出契约、关键点召回率和不实表述；当前样例用于验证评测流程，不替代真实用户评价。
-
-## 后续计划
-
-- 扩充到 20 条匿名化岗位样本，对比不同 Prompt 版本
-- 将单机内存限流升级为持久化限流（适用于多实例部署）
-- 增加浏览器端到端测试
-- 归档未使用的旧版目录
+- 缓存与限流目前保存在单进程内存中（重启清零），适合个人展示和轻量场景；如需多实例部署可替换为 Redis。
+- 早期曾实验过一个 PyInstaller 桌面封装原型，因体积膨胀至 150MB+ 且前端未闭环已弃用，目前以 FastAPI Web 生产版为主线。
